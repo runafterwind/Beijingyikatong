@@ -1,0 +1,3938 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include "InitSystem.h"
+
+#include <termios.h>    									/*PPSIX 终端控制定义*/
+#include <linux/hdreg.h>
+#include "RC500.h"
+#include "../bzdes/stades.h"
+#include "../sound/sound.h"
+#include "../qpboc/includes.h"
+#include "../OfflineRecharge/OfflineRecharge.h"
+
+#define Initprintf 1
+
+#if RUSHAN_BUS
+struct STATION_INFO_ stationhead,stationtaill;
+#endif
+
+int mf_fd;
+int bp_fd;
+int mg_fd;
+int beep_fd;
+
+
+int uart4_fd;
+int led_fd;
+FILE *canshu;
+FILE *ParaFileBuf;
+FILE *BlackFile;
+FILE *Datafile;
+FILE *teth;
+FILE *nettab;
+FILE *Rechargefile;
+unsigned char *CardLanBuf=NULL;
+unsigned char *SectionParBuf=NULL;
+unsigned char *SectionParUpBuf=NULL;
+/*************************************/
+char des_key[8] = {0x20,0x05,0xAF,0x45,0xA3,0xF1,0x80,0x78}; 			//加密密码
+char TcpIpBuf[35];
+unsigned char KeyDes[8];							//密钥
+unsigned char AdminPwd[8];  //管理员密码
+unsigned char SleepOverTime;							//待机关闭超出时间
+unsigned char SecTor[7];
+unsigned char PsamNum[6];
+
+//unsigned char FileCardLan;	//文件信号量 0：表示忙1：表示空闲
+//unsigned char FileOpenFlag;
+unsigned char OperBuffor[80];	//操作员密码备份
+
+unsigned char SelfAddress[36];
+unsigned char OPENBEEP;   //  //1打开声音 0关闭声音
+unsigned char BankCardSwitch;//0x55-允许刷银行卡,0xAA-禁止刷银行卡
+unsigned char OperCount;   //操作员个数
+unsigned char OPENPRINTF = 0;
+unsigned char SavedataErr = 0;
+unsigned char ReadCardFirst;
+//unsigned char savedataflag;    		//文件自锁
+unsigned char COMNET;  // 1: 有线TCP/IP   2: 天线WIFI     3: 天线CDMA   4: 无线GPRS
+unsigned short SectionNum;
+
+LongUnon TransactionNum;     // 总交易次数
+LongUnon SaveNum;     //数据存储 存储记录的数量
+LongUnon SaveNumBs;   //数据存储
+LongUnon SaveNumBc;   //数据存储
+LongUnon CodeNum; 		// 已上传记录数
+LongUnon Buf;		//硬件金额
+LongUnon DevNum;	//终端机机号
+LongUnon DevSID;   ///终端机流水号
+ShortUnon Infor;
+ShortUnon Driver;
+
+CardLanSector LanSec;		//用户扇区
+des_context ctx;      //des加密算法函数使用到的上下文
+
+
+extern RouteSelection JackCmd;
+extern SectionFarPar Section,Sectionup;
+extern int RecFd;
+
+extern pthread_mutex_t m_stationrecord;
+
+st_BlackFile BlackListFile;
+
+unsigned char g_FgFileOccurError = 0;
+unsigned char g_FgSendErrorAgain = 0;
+
+//#if defined(ZHAOTONG_BUS)
+unsigned char g_FgHasFindCardHandle = 0;
+unsigned char g_FgCardHandleOrNot = 0; //0x55不需要过cardhandle 匹配,0xAA需要经过cardhandle匹配(默认)，
+								//0xcc需要进过cardhandle 但只取后2位OriginalCardType = 0xXX，找不到则不SET
+//#endif
+extern unsigned int g_MaxPersonNumber;
+extern unsigned char updataflag;								
+/*****************************************
+void Bcd_To_Asc(unsigned char *Asc, unsigned char *Bcd, unsigned char nlen)
+功能 ： BCD －－＞ ASCII
+入口参数： data: 转换数据的入口指针
+buffer: 转换后数据入口指针
+len : 需要转换的长度
+返回参数：转换后数据长度
+*******************************************/
+void Bcd_To_Asc(unsigned char *Asc, unsigned char *Bcd, unsigned char nlen)
+{
+	unsigned char i;
+	for(i = 0; i < nlen/2; i++)
+	{
+		Asc[2*i] = (Bcd[i]>>4) + '0';
+		Asc[2*i+1] = (Bcd[i] & 0x0f) + '0';
+	}
+}
+/*
+*************************************************************************************************************
+- 函数名称 : int hex_2_ascii(INT8U *INdata, char *buffer, INT16U len)
+- 函数说明 : HEX 到 ASCII的转换函数
+- 入口参数： INdata
+- 输出参数 : buffer
+*************************************************************************************************************
+*/
+int hex_2_ascii(unsigned char *INdata, char *buffer, unsigned int len)
+{
+	const char ascTable[17] = {"0123456789ABCDEF"};
+	char *tmp_p = buffer;
+	unsigned int i, pos;
+
+	pos = 0;
+	for(i = 0; i < len; i++)
+	{
+		tmp_p[pos++] = ascTable[INdata[i] >> 4];
+		tmp_p[pos++] = ascTable[INdata[i] & 0x0f];
+	}
+	tmp_p[pos] = '\0';
+	return pos;
+}
+
+int hex_2_ascii_gps(unsigned char *INdata, char *buffer, unsigned int len)
+{
+	const char ascTable[17] = {"0123456789ABCDEF"};
+	char *tmp_p = buffer;
+	unsigned int i, pos;
+
+	pos = 0;
+	for(i = 0; i < len; i++)
+	{
+		tmp_p[pos++] = ascTable[INdata[i] >> 4];
+		tmp_p[pos++] = ascTable[INdata[i] & 0x0f];
+	}
+	tmp_p[pos] = '\0';
+	return pos;
+}
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char HEX2BCD(unsigned char hex_data)
+- 函数说明 :
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+unsigned char HEX2BCD(unsigned char hex_data)
+{
+	unsigned int bcd_data;
+	unsigned char temp;
+	temp=hex_data%100;
+	bcd_data=((unsigned int)hex_data)/100<<8;
+	bcd_data=bcd_data|temp/10<<4;
+	bcd_data=bcd_data|temp%10;
+	temp = (unsigned char)bcd_data;
+	return temp;
+}
+
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char HEX2BCD(unsigned char hex_data)
+- 函数说明 : BCD －－ ＞HEX
+- 输入参数 : BCD
+- 输出参数 : HEX
+*************************************************************************************************************
+*/
+unsigned char BCD2HEX(char bcd_data)
+{
+	unsigned char temp;
+	temp=(((bcd_data>>4)*10)+(bcd_data&0x0f));
+	return temp;
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : void HEX8TOBCD(unsigned int In, unsigned char *Pdata)
+- 函数说明 :
+- 入口参数：
+- 输出参数 :
+*************************************************************************************************************
+*/
+void HEX8TOBCD(unsigned int In, unsigned char *Pdata)
+{
+	unsigned int iv,i;
+	unsigned char BCD[4];//定长8位BCD码
+	unsigned char sv[9];
+	iv = In;
+	sprintf(sv,"%08u",iv);
+	for(i=0; i<8; i+=2)
+	{
+		BCD[i/2]=(sv[i]<<4)|(sv[i+1]&0x0F);
+	}
+	memcpy(Pdata,BCD,4);
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned int  BCDToDec(const unsigned char *bcd, unsigned  char length)
+- 函数说明 :
+- 入口参数：
+- 输出参数 :
+*************************************************************************************************************
+*/
+unsigned int  BCDToDec(const unsigned char *bcd, unsigned  char length)
+{
+	int tmp;
+	unsigned int dec = 0;
+	unsigned char i;
+
+	for(i = 0; i < length; i++)
+	{
+		tmp = ((bcd[i] >> 4) & 0x0F) * 10 + (bcd[i] & 0x0F);
+		dec += tmp * pow(100, length - 1 - i);
+	}
+
+	return dec;
+}
+
+
+unsigned char mystrncmp(const unsigned char *istra,const unsigned char *istrb,unsigned char len)
+{
+	unsigned char i;
+
+	for(i=0; i<len; i++)
+	{
+		if(istra[i] != istrb[i])
+		{
+			break;
+		}
+	}
+
+	if(i==len) i=0;
+	else i=1;
+
+	return i;
+}
+
+/*
+*************************************************************************************************************
+- 函数名称 : char  Wr_time (char *dt)
+- 函数说明 : 写时间
+- 输入参数 : dt
+- 输出参数 :
+*************************************************************************************************************
+*/
+char  Wr_time (char *dt)
+{
+	struct tm tm;
+	struct tm _tm;
+	struct timeval tv;
+	time_t timep;
+	sscanf(dt, "%d-%d-%d %d:%d:%d", &tm.tm_year,
+	       &tm.tm_mon, &tm.tm_mday,&tm.tm_hour,
+	       &tm.tm_min, &tm.tm_sec);
+	_tm.tm_sec = tm.tm_sec;
+	_tm.tm_min = tm.tm_min;
+	_tm.tm_hour = tm.tm_hour;
+	_tm.tm_mday = tm.tm_mday;
+	_tm.tm_mon = tm.tm_mon - 1;
+	_tm.tm_year = tm.tm_year - 1900;
+	timep = mktime(&_tm);
+	tv.tv_sec = timep;
+	tv.tv_usec = 0;
+	if(settimeofday (&tv, (struct timezone *) 0) < 0)
+	{
+		printf("Set system datatime error!\n");
+		return 255;
+	}
+	return 0;
+}
+/*
+*************************************************************************************************************
+- 函数名称 : char * Rd_time (char* buff)
+- 函数说明 : 读时间
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+char * Rd_time (char* buff)
+{
+	time_t t;
+	struct tm * tm;
+	time (&t);
+	tm = localtime (&t);
+	buff[0] = HEX2BCD((unsigned char)tm->tm_year-100);
+	buff[1] = HEX2BCD(tm->tm_mon+1);
+	buff[2] = HEX2BCD(tm->tm_mday);
+	buff[3] = HEX2BCD(tm->tm_hour);
+	buff[4] = HEX2BCD(tm->tm_min);
+	buff[5] = HEX2BCD(tm->tm_sec);
+	return buff;
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : char * Rd_time (char* buff)
+- 函数说明 : 读时间
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+char Rd_timed (struct tm * tm)
+{
+	time_t t;
+	// struct tm * tm;
+	time (&t);
+	tm = localtime (&t);
+	return tm->tm_sec;
+}
+
+void sigroutine(int signal)
+{
+	switch (signal)
+	{
+	case SIGALRM:
+		// close buzzer
+		ioctl(bp_fd,0);
+		break;
+		
+	case SIGVTALRM:
+		break;
+	}
+	return;
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : void beepopen (unsigned char Mode)
+- 函数说明 : 蜂呜器
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+extern int thread_timer;
+void beepopen (unsigned char Mode)
+{
+#if DBG_RC500
+	return;
+#endif
+//	printf("beep Mode %d\n",Mode);
+	switch(Mode)
+		{
+		case 1: 			//短声
+			buzz_on();
+			usleep(20000);
+			buzz_off();
+			//thread_timer = 1;
+			break;
+		case 2: 			//长声
+		#if 1
+			buzz_on();
+			usleep(50000);
+			buzz_off();
+		#endif
+			//buzz_on();
+			//thread_timer = 4;
+			break;
+		case 3:
+			buzz_on();
+			usleep(150000);
+			buzz_off();
+			usleep(80000);
+			buzz_on();
+			usleep(150000);
+			buzz_off();
+			usleep(80000);
+			buzz_on();
+			usleep(150000);
+			buzz_off();
+			break;
+		case 4:
+			buzz_on();
+			usleep(150000);
+			buzz_off();
+			usleep(80000);
+			buzz_on();
+			usleep(150000);
+			buzz_off();
+			break;
+		case 5: 			//长声
+			buzz_on();
+			usleep(600000);
+			buzz_off();
+			break;
+		case 6: 			//长声
+			buzz_on();
+			usleep(100000);
+			buzz_off();
+			break;
+		case 10:
+			buzz_on();
+			break;
+	
+		case 11:
+			buzz_off();
+			break;
+	
+		default :
+			break;
+		}
+
+}
+
+
+
+void SoundMode(unsigned char mode)
+{
+    switch(mode)
+    {
+        case 1:
+            soundon();
+            break;
+        case 2:
+            soundoff();
+            break;
+        default:
+           break;
+        }
+    
+    }
+
+void LEDR(unsigned char ON)
+{
+	char sw;
+	if(led_fd <= 0)	return;
+		
+	if(ON)
+	{
+		sw = 1;
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDRED, &sw);
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDRED, &sw);
+	}
+	else
+	{
+		sw = 2;
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDRED, &sw);
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDRED, &sw);
+	}
+}
+
+
+void LEDL(unsigned char ON)
+{
+	char sw;
+	if(led_fd <= 0)	return;
+
+	if(ON)
+	{
+		sw = 1;
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDGREEN, &sw);
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDGREEN, &sw);
+	}
+	else
+	{
+		sw = 2;
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDGREEN, &sw);
+		ioctl(led_fd, SPI_SERVER_GPIO_LEDGREEN, &sw);
+	}
+}
+
+
+unsigned char cdma_on(void)
+{
+	int fd;
+	struct gpio_config gpio;
+
+	fd=open("/dev/fullgpio",O_RDWR);
+	if(fd==-1)
+	{
+		printf("open module error!\n");
+		return 1;
+	}
+	gpio.port = 'G';
+	gpio.num = 5;
+	gpio.data = 0;
+	write(fd,&gpio,sizeof(struct gpio_config));
+	close(fd);
+	return 0;
+}
+
+unsigned char cdma_rest(unsigned int dev)
+{
+/*
+	int fd;
+	struct gpio_config gpio;
+
+	fd=open("/dev/fullgpio",O_RDWR);
+	if(fd==-1)
+	{
+		printf("open module error!\n");
+		return 1;
+	}
+	gpio.port = 'G';
+	gpio.num = 4;
+	gpio.data =1;
+	write(fd,&gpio,sizeof(struct gpio_config));
+	usleep(150000);
+	gpio.port = 'G';
+	gpio.num = 4;
+	gpio.data =0;
+	write(fd,&gpio,sizeof(struct gpio_config));
+	close(fd);
+*/
+	switch(dev)
+	{
+		case 3:
+			/*
+			w55fa93_setio(GPIO_GROUP_D, 6, 0);
+			sleep(3);
+			w55fa93_setio(GPIO_GROUP_D, 6, 1);	
+			*/
+			w55fa93_setio(GPIO_GROUP_A, 1, 0);
+			sleep(5);
+			w55fa93_setio(GPIO_GROUP_A, 1, 1);	
+			break;
+		case 4:
+#if WCDMA
+            w55fa93_setio(GPIO_GROUP_D, 6, 1);
+			usleep(150000);
+			w55fa93_setio(GPIO_GROUP_D, 6, 0);	
+#else
+          //  usleep(5000);
+		/*	w55fa93_setio(GPIO_GROUP_D, 6, 0);
+			usleep(150000);
+			w55fa93_setio(GPIO_GROUP_D, 6, 1);		
+			*/
+			w55fa93_setio(GPIO_GROUP_A, 1, 0);
+			sleep(1);
+			w55fa93_setio(GPIO_GROUP_A, 1, 1);		
+            
+#endif            
+			break;
+		default:
+			break;
+	}
+	return 0;
+}
+
+
+
+unsigned char cdma_off(void)
+{
+	int fd;
+	struct gpio_config gpio;
+
+	fd=open("/dev/fullgpio",O_RDWR);
+	if(fd==-1)
+	{
+		printf("open module error!\n");
+		return 1;
+	}
+	gpio.port = 'G';
+	gpio.num = 5;
+	gpio.data =1;
+	write(fd,&gpio,sizeof(struct gpio_config));
+	close(fd);
+	return 0;
+}
+
+/*
+*************************************************************************************************************
+- 函数名称 : char ethopen(void)
+- 函数说明 : 判断连接方式
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+char Ipkey[50];
+char ethopen(void)
+{
+	int ret;
+	char status;
+	char buff[50];
+
+	if(access("tabneton.bin",0)== 0)
+	{
+
+#if Initprintf
+		printf("tabneton.bin  open\n");
+#endif
+		nettab = fopen("tabneton.bin","rb+");
+		ret = fseek(nettab,0, SEEK_SET);
+		memset (buff,0,sizeof(buff));
+		ret = fread(buff,sizeof(unsigned char),32,nettab);
+		fclose(nettab);
+
+#if Initprintf
+		printf("ethopen  buff== %s \n",buff);
+#endif
+
+		switch(buff[0])
+		{
+		case '1': // TCP/IP
+			status = 1;
+			break;
+
+		case '2':// WIFI
+			/*memset(Ipkey,0,sizeof(Ipkey));
+			memcpy(Ipkey,buff+1,48);
+			system("ifconfig ra0 > teth.bin");
+			usleep(50000);
+			teth = fopen("teth.bin","rb+");
+			memset(buff,0,sizeof(buff));
+			ret = fseek(teth,0, SEEK_SET);
+			memset (buff,0,sizeof(buff));
+			ret = fread(buff,sizeof(unsigned char),8,teth);
+			fclose(teth);
+			if(mystrncmp(buff,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+			{
+				status = 1;
+			}
+			else
+			{
+				status = 2;
+			}
+            */
+            status = 2;
+			break;
+
+		case '3':// CDMA
+
+			status = 3;
+			break;
+
+		case '4':// GPRS
+			status = 4;
+			break;
+		default:
+			status = 1;
+			break;
+		}
+
+	}
+	else
+	{
+		memset(buff,0,sizeof(buff));
+		sprintf(buff,"4cardlan 89966666");
+		nettab = fopen("tabneton.bin","a+");
+		ret = fseek(nettab,0, SEEK_SET);
+		ret = fwrite(buff,sizeof(unsigned char),strlen(buff),nettab);
+		fclose(nettab);
+		status = 1;
+	}
+
+#if Initprintf
+	printf("ethopen status == %d \n",status);
+#endif
+
+	return status;
+
+}
+
+
+/*===========黑名单新方式===========*/
+
+//-----------------------------------------------------------------------------------
+int half_search(BlackItem dest, int *find)
+{
+	int low,high,mid,val;
+	low = 0;
+	*find = 0;
+	low = 0;
+	mid = 0;
+
+	if(BlackListFile.count == 0)
+		return 0;
+
+	high = BlackListFile.count - 1;
+
+	DBG_PRINTF("high= %d\n", high);
+	DBG_PRINTF("dest: %02X%02X%02X%02X%02X%02X%02X%02X\n", dest.dat[0],dest.dat[1],\
+		dest.dat[2],dest.dat[3],dest.dat[4],dest.dat[5],dest.dat[6],dest.dat[7]);
+	
+
+	while (low <= high)
+	{
+		mid = (low + high)/ 2;
+
+		DBG_PRINTF("BlackListFile.buf[mid].dat: %02X%02X%02X%02X%02X%02X%02X%02X\n", BlackListFile.buf[mid].dat[0],BlackListFile.buf[mid].dat[1],\
+		BlackListFile.buf[mid].dat[2],BlackListFile.buf[mid].dat[3],BlackListFile.buf[mid].dat[4],BlackListFile.buf[mid].dat[5],BlackListFile.buf[mid].dat[6],BlackListFile.buf[mid].dat[7]);
+
+		DBG_PRINTF("mid=%d  BlackListFile.buf[mid].dat=%s\n",mid,BlackListFile.buf[mid].dat);
+
+		val = memcmp(dest.dat, BlackListFile.buf[mid].dat, sizeof(BlackListFile.buf[0]));
+		if (val == 0)
+		{
+			unsigned char src[10];
+			memcpy(src, BlackListFile.buf[mid].dat, sizeof(BlackListFile.buf[0]));
+			DBG_PRINTF("src: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\n", src[0],src[1],\
+				src[2],src[3],src[4],src[5],src[6],src[7],src[8],src[9]);
+
+			*find = 1;
+			low = mid;
+			break;
+		}
+		else if (val > 0)
+			low = mid + 1;	//dest > src
+		else
+			high = mid - 1;
+	}
+
+	DBG_PRINTF("low= %d find=%d\n", low, *find);
+
+	return low;
+}
+
+
+void ReloadBlackListBuff(void)
+{
+	FILE *fp;
+	int i,j;
+//	BlackListFile.buf = NULL;
+	BlackListFile.count = 0;
+	
+	memset(BlackListFile.buf, 0x00, (MAX_BLACK_CONNT * sizeof(BlackListFile.buf[0])));
+
+	fp = fopen(CITYUNION_BL_FILE, "rb+");
+	if(fp == NULL)
+	{	
+		printf("Can't open tht Blacklist.sys\n");
+		return;
+	}
+
+	fseek(fp,0,SEEK_END);
+	BlackListFile.count = ftell(fp) / sizeof(BlackListFile.buf[0]);
+	fseek(fp,0,SEEK_SET);
+	fread(BlackListFile.buf, sizeof(BlackItem), BlackListFile.count, fp);
+	fclose(fp);
+}
+
+void InitBlackListBuff()
+{
+#if 0
+	FILE *fp;
+	FILE *fpbak;
+
+	BlackListFile.buf = NULL;
+	BlackListFile.count = 0;
+	
+	BlackListFile.buf = (BlackItem *)malloc(MAX_BLACK_CONNT * sizeof(BlackListFile.buf[0]));
+	if(BlackListFile.buf == NULL) return;
+	memset(BlackListFile.buf, 0x00, (MAX_BLACK_CONNT * sizeof(BlackListFile.buf[0])));
+	
+	fp = fopen(CITYUNION_BL_FILE, "rb+");
+	if(fp == NULL)
+	{	
+		printf("Can't open tht Blacklist.sys\n");
+		return;
+	}
+
+	fseek(fp,0,SEEK_END);
+	BlackListFile.count = ftell(fp) / sizeof(BlackListFile.buf[0]);	
+	fseek(fp,0,SEEK_SET);
+	fread(BlackListFile.buf, sizeof(BlackItem), BlackListFile.count, fp);
+	fclose(fp);
+#else
+		FILE *fp;
+		int i,j;
+	BlackListFile.buf = NULL;
+	BlackListFile.count = 0;
+	
+	BlackListFile.buf = (BlackItem *)malloc(MAX_BLACK_CONNT * sizeof(BlackListFile.buf[0]));
+	if(BlackListFile.buf == NULL) return;
+	memset(BlackListFile.buf, 0x00, (MAX_BLACK_CONNT * sizeof(BlackListFile.buf[0])));
+
+	fp = fopen(CITYUNION_BL_FILE, "rb");
+	if(fp == NULL)
+	{	
+		printf("Can't open tht Blacklist.sys\n");
+		return;
+	}
+
+	fseek(fp,0,SEEK_END);
+	BlackListFile.count = ftell(fp) / sizeof(BlackListFile.buf[0]);
+	fseek(fp,0,SEEK_SET);
+	fread(BlackListFile.buf, sizeof(BlackItem), BlackListFile.count, fp);
+	fclose_nosync(fp);
+#if DEBUG	
+	for(i=0;i<BlackListFile.count;i++)
+	{
+		printf("BlackListFile.buf[%d].dat: %02X%02X%02X%02X%02X%02X%02X%02X\n", i,BlackListFile.buf[i].dat[0],BlackListFile.buf[i].dat[1],\
+		BlackListFile.buf[i].dat[2],BlackListFile.buf[i].dat[3],BlackListFile.buf[i].dat[4],BlackListFile.buf[i].dat[5],BlackListFile.buf[i].dat[6],BlackListFile.buf[i].dat[7]);
+	}
+#endif		
+#endif
+}
+
+/*
+************************************************************************
+- 函数名称 : int InitCardBin()
+- 函数说明 : 初始化卡bin，将文件里面的数据读到buff中
+- 输入参数 : 无
+- 输出参数 : 无
+- 返回参数 :0-success   1-fail
+************************************************************************
+*/
+int InitCardBin()
+{
+	FILE* pfile=NULL;
+	struct stat fileInfo;
+
+	if(access("/mnt/record/BankNoPrefix.bin" , F_OK) != 0)
+	{
+		printf("\nBankNoPrefix.bin不存在\n");
+		return 1;
+	}
+
+	stat("/mnt/record/BankNoPrefix.bin" , &fileInfo);
+	CardBin.num = fileInfo.st_size/4;
+	if(CardBin.pCardBin != NULL)
+	{
+		free(CardBin.pCardBin);
+		CardBin.pCardBin = NULL;
+	}
+	CardBin.pCardBin = (unsigned char *)malloc(CardBin.num*4);
+	if(CardBin.pCardBin == NULL)
+		return 1;
+
+	pfile = fopen("/mnt/record/BankNoPrefix.bin" , "rb");
+	fread(CardBin.pCardBin , 4 , CardBin.num , pfile);
+	fclose_nosync(pfile);
+
+	return 0;
+}
+
+//从buff中取出数据
+int GetCardBinData(unsigned char *buff,unsigned int position)
+{
+	memcpy(buff , &CardBin.pCardBin[4*position] , 4);
+#if defined(ZHAOTONG_BUS)
+	return 1;//比较前3字节
+#else
+	if(buff[3] == 0xff)
+		return 1;//比较前3字节
+	else
+		return 2;//比较前4字节
+#endif
+}
+
+/*
+************************************************************************
+- 函数名称 : unsigned char BinarySearch(unsigned char *buff, unsigned char *lastb)
+- 函数说明 : 二分法查找
+- 输入参数 : buff-待查找数据
+- 输出参数 : 无
+- 返回参数 :0-success   1-fail
+************************************************************************
+*/
+unsigned char BinarySearch(unsigned char *buff, unsigned char *lastb)
+{
+	int i;
+	int status = 1,ret;
+	unsigned int source,key;
+	unsigned char tmp[4];
+	int low,high,mid,lowflag,highflag;
+
+
+	if(CardBin.num == 0 || CardBin.pCardBin == NULL)
+		return 1;
+	#if 1
+	printf("\nCardBin.num=%d\n",CardBin.num);
+	for(i=0;i<CardBin.num*4;i++)
+		printf("%02x ",CardBin.pCardBin[i]);
+	printf("\n");
+	for(i=0;i<4;i++)
+		printf("%02x ",buff[i]);
+	printf("\n");
+	#endif
+	
+	lowflag = 0;
+	highflag = 0;
+	
+	low = 0;
+	high = CardBin.num - 1;
+	while(low <= high)
+	{
+		memset(tmp , 0 , 4);
+		ret = GetCardBinData(tmp , low);
+		printf("\n1---ret=%d\n",ret);
+		if(ret == 1)
+		{
+			key = buff[0]<<16|buff[1]<<8|buff[2];
+			source = tmp[0]<<16|tmp[1]<<8|tmp[2];
+		}
+		#if !defined(ZHAOTONG_BUS)
+		else
+		{
+			key = buff[0]<<24|buff[1]<<16|buff[2]<<8|buff[3];
+			source = tmp[0]<<24|tmp[1]<<16|tmp[2]<<8|tmp[3];
+		}
+		#endif
+		printf("\n1---key=%d,source=%d\n",key,source);
+		
+		if(key == source)
+		{
+			status = 0;
+			break;
+		}
+		else
+		{
+			memset(tmp , 0 , 4);
+			ret = GetCardBinData(tmp , high);
+			printf("\n2---ret=%d\n",ret);
+			if(ret == 1)
+			{
+				key = buff[0]<<16|buff[1]<<8|buff[2];
+				source = tmp[0]<<16|tmp[1]<<8|tmp[2];
+			}
+			#if !defined(ZHAOTONG_BUS)
+			else
+			{
+				key = buff[0]<<24|buff[1]<<16|buff[2]<<8|buff[3];
+				source = tmp[0]<<24|tmp[1]<<16|tmp[2]<<8|tmp[3];
+			}
+			#endif
+			printf("\n2---key=%d,source=%d\n",key,source);
+			if(key == source)
+			{
+				status = 0;
+				break;
+			}
+			else
+			{
+				mid = (low + high) / 2;
+				memset(tmp , 0 , 4);
+				ret = GetCardBinData(tmp , mid);
+				printf("\n3---ret=%d\n",ret);
+				if(ret == 1)
+				{
+					key = buff[0]<<16|buff[1]<<8|buff[2];
+					source = tmp[0]<<16|tmp[1]<<8|tmp[2];
+				}
+				#if !defined(ZHAOTONG_BUS)
+				else
+				{
+					key = buff[0]<<24|buff[1]<<16|buff[2]<<8|buff[3];
+					source = tmp[0]<<24|tmp[1]<<16|tmp[2]<<8|tmp[3];
+				}
+				#endif
+				printf("\n3---key=%d,source=%d\n",key,source);
+				if(key == source)
+				{
+					status = 0;
+					break;
+				}
+				else if(key > source)
+				{
+					if((mid == low)||(high ==mid))
+						lowflag++;
+					
+					if(lowflag == 2)	
+						break;
+					low = mid;
+				}
+				else
+				{
+					if((mid == low)||(high ==mid))
+						highflag++;
+					
+					if(highflag == 2)	
+						break;
+					high = mid;
+				}	
+			}	
+		}  
+	}
+	
+	if ((!status) && (lastb != NULL)) *lastb = tmp[3];
+	
+	return(status);
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : void ReadOrWriteFile (unsigned char RW_Type)
+- 函数说明 : 读写初始化数据 函数
+- 输入参数 : RW_Type
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+
+
+#ifdef	SAVE_CONSUM_DATA_DIRECT
+void ReadOrWriteFileB(unsigned char RW_Type)
+{
+	int canshu, result;
+	char status;
+	unsigned char i;//j;
+	unsigned char fileBuffer[16];
+	unsigned char FileBuf[8];
+	unsigned char filebuf[80];
+	unsigned int j;
+	LongUnon tmp,tmp1;
+
+	des_set_key(&ctx,des_key); //设置des加密密码
+	switch (RW_Type)
+	{
+	case SYSFILE:					//读取密钥
+		canshu = open(SYS_PARAM_FILE, O_SYNC|O_RDWR);
+		result = lseek(canshu, 0, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x11\x22\x33\x44\x55\x66\x77\x88",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,0, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 0, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(KeyDes,FileBuf,8);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(KeyDes,FileBuf,8);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));		//读取终端机号
+		result = lseek(canshu, 16, SEEK_SET);
+		result = read(canshu,FileBuf,8);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,16, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 16, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(DevNum.longbuf,FileBuf,4);
+			memset(PsamNum,0,sizeof(PsamNum));
+			memcpy(PsamNum+2,FileBuf,4);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(DevNum.longbuf,FileBuf,4);
+			memset(PsamNum,0,sizeof(PsamNum));
+			memcpy(PsamNum+2,FileBuf,4);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));		//读取管理员密码
+		result = lseek(canshu, 32, SEEK_SET);
+		result = read(canshu,FileBuf,8);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x30\x30\x30\x30\x30\x30\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,32, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 32, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(AdminPwd,FileBuf,8);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(AdminPwd,FileBuf,8);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));			//修改待机时间
+		result = lseek(canshu, 48, SEEK_SET);
+		result = read(canshu,FileBuf,8);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x1E\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,48, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 48, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			SleepOverTime	= FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			SleepOverTime	= FileBuf[0];
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 64, SEEK_SET);
+		result = read(canshu,FileBuf,8);		//读取用户扇区
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x02\x03\x04\x05\x06\x07\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,64, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 64, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(&LanSec,FileBuf,8);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(&LanSec,FileBuf,8);
+		}
+
+		memset (filebuf,0,sizeof(filebuf));
+		result = lseek(canshu, 80, SEEK_SET);
+		result = read(canshu,filebuf,40);	//读取IP
+		if(mystrncmp(filebuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memset(filebuf,0,sizeof(filebuf));
+			sprintf(filebuf,"172.0.9.119");
+			memcpy(filebuf+32,"\x0c\x1a",2);
+			for(i = 0; i < 5; i ++)
+			{
+				des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			result = lseek(canshu,80, SEEK_SET);
+			result = write(canshu,filebuf,40);
+
+			result = lseek(canshu, 80, SEEK_SET);
+			memset (filebuf,0,sizeof(filebuf));
+			result = read(canshu,filebuf,40);
+			for(i = 0; i < 5; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(TcpIpBuf,filebuf,35);
+		}
+		else
+		{
+			for(i = 0; i < 5; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(TcpIpBuf,filebuf,35);
+		}
+
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 128, SEEK_SET);
+		result = read(canshu,FileBuf,8);		//CPU卡应用
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x3f\x01\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,128, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 128, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(LanSec.ADFNUM,FileBuf,2);
+
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(LanSec.ADFNUM,FileBuf,2);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 144, SEEK_SET);
+		result = read(canshu,FileBuf,8);		//出车流水ID
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,144, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 144, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(DevSID.longbuf,FileBuf,4);
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(DevSID.longbuf,FileBuf,4);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 160, SEEK_SET);
+		result = read(canshu,FileBuf,8);	//记录条数
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,160, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 160, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(CodeNum.longbuf,FileBuf,4);
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(CodeNum.longbuf,FileBuf,4);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 176, SEEK_SET);
+		result = read(canshu,FileBuf,8);	//按鍵声
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,176, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 176, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OPENBEEP = FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OPENBEEP = FileBuf[0];
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 192, SEEK_SET);
+		result = read(canshu,FileBuf,8);		//按鍵声
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,192, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 192, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OperCount = FileBuf[0];
+			if(OperCount >= 11)  OperCount = 0;
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OperCount = FileBuf[0];
+			if(OperCount >= 11)  OperCount = 0;
+		}
+
+		memset(SelfAddress,0,sizeof(SelfAddress));
+		memset (filebuf,0,sizeof(filebuf));
+		result = lseek(canshu, 384, SEEK_SET);
+		result = read(canshu,filebuf,32);
+		if(mystrncmp(filebuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memset(filebuf,0,sizeof(filebuf));
+			memset(fileBuffer,0,sizeof(fileBuffer));
+
+			sprintf(filebuf,"00.00.00.00");
+			sprintf(fileBuffer,"00.00.00.00");
+			//sprintf(filebuf,"172.0.9.115");
+			//sprintf(fileBuffer,"172.0.0.1");
+			memcpy(filebuf+16,fileBuffer,16);
+
+			for(i = 0; i < 4; i ++)
+			{
+				des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			result = lseek(canshu,384, SEEK_SET);
+			result = write(canshu,filebuf,32);
+
+			result = lseek(canshu, 384, SEEK_SET);
+			memset (filebuf,0,sizeof(filebuf));
+			result = read(canshu,filebuf,32);
+			for(i = 0; i < 4; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(SelfAddress,filebuf,32);
+		}
+		else
+		{
+			for(i = 0; i < 4; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(SelfAddress,filebuf,32);
+		}
+
+		status = ethopen();
+		switch(status)
+		{
+		case 4: //GPRS
+			COMNET = 4;
+#if Initprintf
+			printf("gprs  ppp  \n");
+#endif
+			break;
+
+		case 3: // CDMA
+			COMNET = 3;
+#if Initprintf
+			printf("CDMA ppp  \n");
+#endif
+			break;
+
+		case 2: //WIFI
+			COMNET = 2;
+		/*	system("ifconfig ra0 192.168.1.1");
+			usleep(50000);
+			memset(filebuf,0,sizeof(filebuf));
+			sprintf(filebuf,"wpa_passphrase ");
+			memcpy(filebuf+15,Ipkey,strlen(Ipkey));
+			strcat(filebuf," >/var/run/wpa_supplicant.conf");
+#if Initprintf
+			printf("ip wifi %s \n",filebuf);
+#endif
+			system(filebuf);
+			// system("wpa_passphrase cardlan 89966666 >/var/run/wpa_supplicant.conf");
+			usleep(50000);
+			system("killall linkwifi.sh");
+			usleep(50000);
+			system("./linkwifi.sh&");
+			usleep(50000);*/
+			break;
+
+		case 1: // TCP/IP
+		default :
+			COMNET = 1;
+			if((TcpIpBuf[0]>='0')&&(TcpIpBuf[0]<='9')&&(SelfAddress[0]>'0')&&(SelfAddress[0]<='9'))
+			{
+				memset(fileBuffer,0,sizeof(fileBuffer));
+				memset(filebuf,0,sizeof(filebuf));
+				sprintf(filebuf,"nameserver ");
+				memcpy(fileBuffer,SelfAddress+16,16);
+				strcat(filebuf,fileBuffer);
+
+				// nettab = fopen("resolv.conf","a+");
+				//  ret = fseek(nettab,0, SEEK_SET);
+				//   ret = fwrite(filebuf,sizeof(unsigned char),strlen(filebuf),nettab);
+				//  fclose(nettab);
+				// system("cp resolv.conf /etc/");
+				// usleep(50000);
+				// system("rm resolv.conf");
+
+				memset(fileBuffer,'\0',sizeof(fileBuffer));
+				memset(filebuf,'\0',sizeof(filebuf));
+				memcpy(fileBuffer,SelfAddress,16);
+				sprintf(filebuf,"ifconfig eth0 ");
+				strcat(filebuf,fileBuffer);
+				system(filebuf);
+				usleep(50000);
+
+#if Initprintf
+				printf("ip eth0 %s \n",fileBuffer);
+#endif
+
+				memset(fileBuffer,'\0',sizeof(fileBuffer));
+				memcpy(fileBuffer,SelfAddress+16,16);
+				sprintf(filebuf,"route add default gw ");
+				strcat(filebuf,fileBuffer);
+				system(filebuf);
+				usleep(50000);
+				system("route&");
+
+			}
+			else
+			{
+				system("killall -9 udhcpc");
+				system("udhcpc &");
+				usleep(50000);
+			}
+			break;
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,432, SEEK_SET);
+		result = read(canshu,FileBuf,8);	//保存记录条数
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x00\x00\x00\x01\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,432, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,432, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(SaveNum.longbuf,FileBuf,4);
+			memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+			SaveNumBc.i = SaveNumBs.i = SaveNum.i ;
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(SaveNum.longbuf,FileBuf,4);
+			memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+			SaveNumBc.i = SaveNumBs.i = SaveNum.i ;
+		}
+
+        printf("func=%s:line=%d:TransactionNum.i = %d:SaveNumBc.i=%d\n",
+            __func__,__LINE__,TransactionNum.i,SaveNum.i);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,448, SEEK_SET);
+		result = read(canshu,FileBuf,8); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,448, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,448, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(Driver.intbuf,FileBuf,2);
+
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(Driver.intbuf,FileBuf,2);
+		}
+
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		result = lseek(canshu,464, SEEK_SET);
+		result = read(canshu,fileBuffer,16); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00\0x00",9) == 0)
+		{
+			memset(fileBuffer,0,sizeof(fileBuffer));
+			for(i=0; i<2; i++)
+			{
+				des_encrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			result = lseek(canshu,464, SEEK_SET);
+			result = write(canshu,fileBuffer,16);
+
+			result = lseek(canshu,464, SEEK_SET);
+			memset (fileBuffer,0,sizeof(fileBuffer));
+			result = read(canshu,fileBuffer,16);
+
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Section.SationNum,fileBuffer,10);		//连考，不仅仅是sationnum被赋值
+
+
+		}
+		else
+		{
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Section.SationNum,fileBuffer,10);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,480, SEEK_SET);
+		result = read(canshu,FileBuf,8); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\xAA\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,480, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,480, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			ReadCardFirst = FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			ReadCardFirst = FileBuf[0];
+		}
+
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		result = lseek(canshu,496, SEEK_SET);
+		result = read(canshu,fileBuffer,16); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00\0x00",9) == 0)
+		{
+			memset(fileBuffer,0,sizeof(fileBuffer));
+			for(i=0; i<2; i++)
+			{
+				des_encrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			result = lseek(canshu,496, SEEK_SET);
+			result = write(canshu,fileBuffer,16);
+
+			result = lseek(canshu,496, SEEK_SET);
+			memset (fileBuffer,0,sizeof(fileBuffer));
+			result = read(canshu,fileBuffer,16);
+
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Sectionup.SationNum,fileBuffer,6);
+		}
+		else
+		{
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Sectionup.SationNum,fileBuffer,6);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,512, SEEK_SET);
+		result = read(canshu,FileBuf,8); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x01\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,512, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,512, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(&Section.Updown,FileBuf,4);
+			SectionNum = Section.SationNum[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(&Section.Updown,FileBuf,4);
+			if(Section.Updown  == 0)
+			{
+				SectionNum = Section.SationNum[0];
+			}
+			else
+			{
+				SectionNum = Sectionup.SationNum[0];
+			}
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,520, SEEK_SET);
+		result = read(canshu,FileBuf,8);	//0x55允许刷银行卡,0xAA禁止刷银行卡
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\xAA\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,520, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,520, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			BankCardSwitch = FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			BankCardSwitch = FileBuf[0];
+		}
+		
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,528, SEEK_SET);
+		result = read(canshu,FileBuf,8);	//读取额定人数
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,528, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,528, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			//g_MaxPersonNumber = FileBuf[0];
+			memcpy((unsigned char *)&g_MaxPersonNumber, FileBuf, 4);
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			//g_MaxPersonNumber = FileBuf[0];
+			memcpy((unsigned char *)&g_MaxPersonNumber, FileBuf, 4);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,536, SEEK_SET);
+		result = read(canshu,FileBuf,8);	//0x55不需要过cardhandle 匹配,0xAA/0xcc需要经过cardhandle匹配
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\xAA\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,536, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,536, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			g_FgCardHandleOrNot = FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			g_FgCardHandleOrNot = FileBuf[0];
+		}
+
+		memset(FileBuf,0,sizeof(FileBuf));			//读取上一次关机前的线路号
+		result = lseek(canshu,560, SEEK_SET);
+		result = read(canshu,FileBuf,8);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)//若没有该参数记录
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,560, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu,560, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			Section.Linenum[0]=FileBuf[0];
+			Section.Linenum[1]=FileBuf[1];
+			
+		}
+		else{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			Section.Linenum[0]=FileBuf[0];
+			Section.Linenum[1]=FileBuf[1];
+
+		}
+
+#if Initprintf
+		printf("DevNum = %d\n",DevNum.i);
+		printf("LanSec= %d,%d,%d,%d,%d,%d,%d\n",\
+		       LanSec.One,LanSec.Two,LanSec.Thr,LanSec.For,LanSec.Fiv,LanSec.Six,LanSec.Sev);  //LanSec.Zer,
+		printf("LanSec ADFNUM= %02X%02X\n",LanSec.ADFNUM[0],LanSec.ADFNUM[1]);  //LanSec.Zer,
+		memcpy(Infor.intbuf,TcpIpBuf+32,2);
+		printf("TcpIpBuf = %s,%d \n",TcpIpBuf,Infor.i);
+		printf("SelfAddress = %s \n",SelfAddress);
+		printf("DevSID = %04d \n",DevSID.i);
+		printf("CodeNum.i = %05d \n",CodeNum.i);
+		printf("SaveNum.i = %05d \n",SaveNum.i);
+		printf("TransactionNum.i = %05d \n",TransactionNum.i);
+		printf("OPENBEEP = %05d \n",OPENBEEP);
+		printf("Driver = %05d \n",Driver.i);
+		printf("Section down = %d \n",Section.SationNum[0]);
+		printf("Section up = %d \n",Sectionup.SationNum[0]);
+		printf("Section Enable = %02X \n",Section.Enable);
+		printf("ReadCardFirst = %02X \n",ReadCardFirst);
+		printf("BankCardSwitch = %02X\n",BankCardSwitch);
+		printf("g_MaxPerson = %u\n",g_MaxPersonNumber);
+#endif
+
+		close(canshu);
+		break;
+
+	case SELFIP:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memcpy(filebuf,SelfAddress,32);
+		for(i = 0; i < 4; i ++)
+		{
+			des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		result = lseek(canshu,384, SEEK_SET);
+		result = write(canshu,filebuf,40);
+
+		result = lseek(canshu, 384, SEEK_SET);
+		memset (filebuf,0,sizeof(filebuf));
+		result = read(canshu,filebuf,40);
+		for(i = 0; i < 4; i ++)
+		{
+			des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		memcpy(SelfAddress,filebuf,32);
+		close(canshu);
+		break;
+
+	case MUSERKEY://更改密钥
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memcpy(FileBuf,KeyDes,8);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,0, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+		result = lseek(canshu, 0, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(KeyDes,FileBuf,8);
+		close(canshu);
+		break;
+
+	case MTEMNO:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,DevNum.longbuf,4);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,16, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		result = lseek(canshu, 16, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(DevNum.longbuf,FileBuf,4);
+		memcpy(PsamNum+2,FileBuf,4);
+		close(canshu);
+
+#if Initprintf
+		printf("MTEMNO  DevNum==%d \n",DevNum.i);
+#endif
+
+		break;
+
+	case MUESRPWD:	//修改管理员密码
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memcpy(FileBuf,AdminPwd,8);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,32, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		result = lseek(canshu, 32, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(AdminPwd,FileBuf,8);
+		close(canshu);
+		break;
+
+	case MUSERSETOR:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memcpy(FileBuf,&LanSec,8);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,64, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,LanSec.ADFNUM,2);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,128, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+		close(canshu);
+		break;
+
+	case MSEVERIP:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memcpy(filebuf,TcpIpBuf,40);
+		for(i = 0; i < 5; i ++)
+		{
+			des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		result = lseek(canshu,80, SEEK_SET);
+		result = write(canshu,filebuf,40);
+
+		result = lseek(canshu, 80, SEEK_SET);
+		memset (filebuf,0,sizeof(filebuf));
+		result = read(canshu,filebuf,40);
+		for(i = 0; i < 5; i ++)
+		{
+			des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		memcpy(TcpIpBuf,filebuf,40);
+		close(canshu);
+		break;
+
+	case OPERADORED:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		FileBuf[0] = OperCount;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,192, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		result = lseek(canshu, 192, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		OperCount = FileBuf[0];
+		close(canshu);
+		break;
+
+	case SLEEPOVER:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0] = SleepOverTime;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,48, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		result = lseek(canshu, 48, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		SleepOverTime = FileBuf[0];
+		close(canshu);
+		break;
+
+	case DEVSERIALID:		
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,DevSID.longbuf,4);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,144, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		result = lseek(canshu, 144, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(DevSID.longbuf,FileBuf,4);		
+		close(canshu);
+		break;
+
+	case CODEFILE:   //保存记录数		
+		for(j = 0; j < 6; j++)
+		{
+			canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+			memset(FileBuf,0,sizeof(FileBuf));
+			memcpy(FileBuf,CodeNum.longbuf,4);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,160, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+
+			result = lseek(canshu, 160, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			close(canshu);
+			//memcpy(CodeNum.longbuf,FileBuf,4);				
+			memcpy(tmp.longbuf,FileBuf,4);				
+			if(tmp.i == CodeNum.i)
+				break;
+		}
+#if Initprintf
+		printf("CODEFILE CodeNum==%d \n",CodeNum.i);
+#endif
+		break;
+
+	case RCODEFILE:   //读记录数
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 160, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(CodeNum.longbuf,FileBuf,4);
+		close(canshu);
+
+#if Initprintf
+		printf("RCODEFILE CodeNum==%d \n",CodeNum.i);
+#endif
+		break;
+
+	case OPENBUTTON:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0] = OPENBEEP;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,176, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		result = lseek(canshu,176, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		OPENBEEP = FileBuf[0];
+		close(canshu);
+		break;
+
+	case  OPERBUFFER:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memcpy(filebuf,OperBuffor,80);
+		for(i = 0; i < 10; i ++)
+		{
+			des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		result = lseek(canshu,1024, SEEK_SET);
+		result = write(canshu,filebuf,80);
+
+		result = lseek(canshu, 1024, SEEK_SET);
+		memset (filebuf,0,sizeof(filebuf));
+		result = read(canshu,filebuf,80);
+		for(i = 0; i < 10; i ++)
+		{
+			des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		memcpy(OperBuffor,filebuf,80);
+		close(canshu);
+		break;
+
+	case  WSDATA:		
+		for(j = 0; j < 6; j++)
+		{
+			canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+			memset(FileBuf,0,sizeof(FileBuf));
+			memcpy(FileBuf,SaveNum.longbuf,4);
+			memcpy(FileBuf + 4,TransactionNum.longbuf,4);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = lseek(canshu,432, SEEK_SET);
+			result = write(canshu,FileBuf,8);
+			result = lseek(canshu,432, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = read(canshu,FileBuf,8);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			
+			//memcpy(SaveNum.longbuf,FileBuf,4);
+			//memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+			close(canshu);
+			memcpy(tmp.longbuf,FileBuf,4);		
+			memcpy(tmp1.longbuf,FileBuf + 4,4);
+
+			if((tmp.i == SaveNum.i) && (tmp1.i == TransactionNum.i))
+			{				
+				SaveNumBc.i = SaveNumBs.i = SaveNum.i;
+				break;
+			}
+			
+			//fclose(canshu);					
+		}
+#if Initprintf
+		printf("WSDATA SaveNum=%d, TransactionNum=%d\n", SaveNum.i, TransactionNum.i);
+#endif
+		break;
+
+	case  RSDATA:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu, 432, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(SaveNum.longbuf,FileBuf,4);
+		memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+		SaveNumBc.i = SaveNumBs.i = SaveNum.i ;
+		close(canshu);
+
+#if Initprintf
+		printf("RSDATA SaveNum=%d, TransactionNum=%d\n", SaveNum.i, TransactionNum.i);
+#endif
+		break;  //Driver
+
+
+
+	case  DRIVER:
+		canshu = open(SYS_PARAM_FILE,O_RDWR|O_SYNC);
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,Driver.intbuf,2);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,448, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,448, SEEK_SET);
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(Driver.intbuf,FileBuf,2);
+		close(canshu);
+
+#if Initprintf
+		printf("DRIVER Driver ==%d \n",Driver.i);
+#endif
+		break;
+
+//
+
+	case  SETSECTION:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		memcpy(fileBuffer,&Section.SationNum,10);
+
+		for(i=0; i<2; i++)
+		{
+			des_encrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+		}
+
+		result = lseek(canshu,464, SEEK_SET);
+		result = write(canshu,fileBuffer,16);
+
+		result = lseek(canshu,464, SEEK_SET);
+
+		memset (fileBuffer,0,sizeof(fileBuffer));
+		result = read(canshu,fileBuffer,16);
+		for(i=0; i<2; i++)
+		{
+			des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+		}
+		memcpy(&Section.SationNum,fileBuffer,10);
+
+#if Initprintf
+		printf(" set Section %d  Ena=%02X  \n",Section.SationNum[0],Section.Enable);
+#endif
+		close(canshu);
+		break;
+
+	case SETCARDFIRST:
+
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		printf("gc canshu is %d \n",canshu);
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0] = ReadCardFirst;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = lseek(canshu,480, SEEK_SET);
+		result = write(canshu,FileBuf,8);
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = lseek(canshu,480, SEEK_SET);
+		result = read(canshu,FileBuf,8);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		ReadCardFirst = FileBuf[0];
+		close(canshu);
+
+#if Initprintf
+		printf("SETCARDFIRST  ==%02X \n",ReadCardFirst);
+#endif
+
+		break;
+
+
+
+	case  SETSECTIONUP:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		memcpy(fileBuffer,&Sectionup.SationNum,6);
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = lseek(canshu,496, SEEK_SET);
+		result = write(canshu,fileBuffer,8);
+		result = lseek(canshu,496, SEEK_SET);
+		memset (fileBuffer,0,sizeof(fileBuffer));
+		result = read(canshu,fileBuffer,8);
+		des_decrypt(&ctx, fileBuffer, fileBuffer);
+		memcpy(&Sectionup.SationNum,fileBuffer,6);
+		close(canshu);
+#if Initprintf
+		printf(" set SectionUP %d  \n",Sectionup.SationNum[0]);
+#endif
+		break;
+
+
+	case  SETSECTINO_:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		memcpy(fileBuffer,&Section.Updown,4);
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = lseek(canshu,512, SEEK_SET);
+		result = write(canshu,fileBuffer,8);
+		close(canshu);
+#if Initprintf
+		printf("Set SETSECTINO_ Updown %d  \n",Section.Updown);
+#endif
+		break;
+
+
+	case SETBANKCARDSWITCH:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		fileBuffer[0]=BankCardSwitch;
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = lseek(canshu,520, SEEK_SET);
+		result = write(canshu,fileBuffer,8);
+		close(canshu);
+#if Initprintf
+		printf("Set BankCardSwitch %d  \n",BankCardSwitch);
+#endif
+		break;
+
+	case WRITECARDHANDLE:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		fileBuffer[0]=g_FgCardHandleOrNot;
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = lseek(canshu,536, SEEK_SET);
+		result = write(canshu,fileBuffer,8);
+		close(canshu);
+#if Initprintf
+		printf("g_FgCardHandleOrNot %d  \n",g_FgCardHandleOrNot);
+#endif
+		break;
+
+	case PERSONWRITE:
+		canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR);
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		//fileBuffer[0]=g_FgCardHandleOrNot;
+		memcpy(fileBuffer, (unsigned char *)&g_MaxPersonNumber, 4);
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = lseek(canshu,528, SEEK_SET);
+		result = write(canshu,fileBuffer,8);
+		close(canshu);
+#if Initprintf
+		printf("g_MaxPersonNumber %d  \n",g_MaxPersonNumber);
+#endif
+		break;
+	case  SETSECTIONLINE:
+		canshu=fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0]=Section.Linenum[0];
+		FileBuf[1]=Section.Linenum[1];
+		des_encrypt(&ctx,FileBuf,FileBuf);
+		result=fseek(canshu,560,SEEK_SET);
+		result=fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+		result=fseek(canshu,560,SEEK_SET);
+		result=fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt(&ctx,FileBuf,FileBuf);
+		Section.Linenum[0]=FileBuf[0];
+		Section.Linenum[1]=FileBuf[1];
+		fclose_nosync(canshu);
+		break;
+	default :
+		break;
+	}
+	
+	//system("sync");
+}
+
+#else
+void ReadOrWriteFileB(unsigned char RW_Type)
+{
+	int result;
+	char status;
+	unsigned char i;//j;
+	unsigned char fileBuffer[16];
+	unsigned char FileBuf[8];
+	unsigned char filebuf[80];
+
+	des_set_key(&ctx,des_key); //设置des加密密码
+	switch (RW_Type)
+	{
+	case SYSFILE:					//读取密钥
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		result = fseek(canshu, 0, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x11\x22\x33\x44\x55\x66\x77\x88",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,0, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 0, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(KeyDes,FileBuf,8);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(KeyDes,FileBuf,8);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));		//读取终端机号
+		result = fseek(canshu, 16, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,16, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 16, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(DevNum.longbuf,FileBuf,4);
+			memset(PsamNum,0,sizeof(PsamNum));
+			memcpy(PsamNum+2,FileBuf,4);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(DevNum.longbuf,FileBuf,4);
+			memset(PsamNum,0,sizeof(PsamNum));
+			memcpy(PsamNum+2,FileBuf,4);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));		//读取管理员密码
+		result = fseek(canshu, 32, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x30\x30\x30\x30\x30\x30\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,32, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 32, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(AdminPwd,FileBuf,8);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(AdminPwd,FileBuf,8);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));			//修改待机时间
+		result = fseek(canshu, 48, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x1E\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,48, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 48, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			SleepOverTime	= FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			SleepOverTime	= FileBuf[0];
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 64, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);		//读取用户扇区
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x02\x03\x04\x05\x06\x07\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,64, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 64, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(&LanSec,FileBuf,8);
+		}
+		else
+		{
+			des_decrypt( &ctx, FileBuf, FileBuf);
+			memcpy(&LanSec,FileBuf,8);
+		}
+
+		memset (filebuf,0,sizeof(filebuf));
+		result = fseek(canshu, 80, SEEK_SET);
+		result = fread(filebuf,sizeof(unsigned char),40,canshu);	//读取IP
+		if(mystrncmp(filebuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memset(filebuf,0,sizeof(filebuf));
+			sprintf(filebuf,"172.0.9.119");
+			memcpy(filebuf+32,"\x0c\x1a",2);
+			for(i = 0; i < 5; i ++)
+			{
+				des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			result = fseek(canshu,80, SEEK_SET);
+			result = fwrite(filebuf,sizeof(unsigned char),40,canshu);
+
+			result = fseek(canshu, 80, SEEK_SET);
+			memset (filebuf,0,sizeof(filebuf));
+			result = fread(filebuf,sizeof(unsigned char),40,canshu);
+			for(i = 0; i < 5; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(TcpIpBuf,filebuf,35);
+		}
+		else
+		{
+			for(i = 0; i < 5; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(TcpIpBuf,filebuf,35);
+		}
+
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 128, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);		//CPU卡应用
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x3f\x01\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,128, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 128, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(LanSec.ADFNUM,FileBuf,2);
+
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(LanSec.ADFNUM,FileBuf,2);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 144, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);		//出车流水ID
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,144, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 144, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(DevSID.longbuf,FileBuf,4);
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(DevSID.longbuf,FileBuf,4);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 160, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);	//记录条数
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,160, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 160, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(CodeNum.longbuf,FileBuf,4);
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(CodeNum.longbuf,FileBuf,4);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 176, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);	//按鍵声
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,176, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 176, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OPENBEEP = FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OPENBEEP = FileBuf[0];
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 192, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);		//按鍵声
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,192, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu, 192, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OperCount = FileBuf[0];
+			if(OperCount >= 11)  OperCount = 0;
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			OperCount = FileBuf[0];
+			if(OperCount >= 11)  OperCount = 0;
+		}
+
+		memset(SelfAddress,0,sizeof(SelfAddress));
+		memset (filebuf,0,sizeof(filebuf));
+		result = fseek(canshu, 384, SEEK_SET);
+		result = fread(filebuf,sizeof(unsigned char),32,canshu);
+		if(mystrncmp(filebuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memset(filebuf,0,sizeof(filebuf));
+			memset(fileBuffer,0,sizeof(fileBuffer));
+
+			sprintf(filebuf,"00.00.00.00");
+			sprintf(fileBuffer,"00.00.00.00");
+			//sprintf(filebuf,"172.0.9.115");
+			//sprintf(fileBuffer,"172.0.0.1");
+			memcpy(filebuf+16,fileBuffer,16);
+
+			for(i = 0; i < 4; i ++)
+			{
+				des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			result = fseek(canshu,384, SEEK_SET);
+			result = fwrite(filebuf,sizeof(unsigned char),32,canshu);
+
+			result = fseek(canshu, 384, SEEK_SET);
+			memset (filebuf,0,sizeof(filebuf));
+			result = fread(filebuf,sizeof(unsigned char),32,canshu);
+			for(i = 0; i < 4; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(SelfAddress,filebuf,32);
+		}
+		else
+		{
+			for(i = 0; i < 4; i ++)
+			{
+				des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+			}
+			memcpy(SelfAddress,filebuf,32);
+		}
+
+		status = ethopen();
+		switch(status)
+		{
+		case 4: //GPRS
+			COMNET = 4;
+#if Initprintf
+			printf("gprs  ppp  \n");
+#endif
+			break;
+
+		case 3: // CDMA
+			COMNET = 3;
+#if Initprintf
+			printf("CDMA ppp  \n");
+#endif
+			break;
+
+		case 2: //WIFI
+			COMNET = 2;
+			system("ifconfig ra0 192.168.1.1");
+			usleep(50000);
+			memset(filebuf,0,sizeof(filebuf));
+			sprintf(filebuf,"wpa_passphrase ");
+			memcpy(filebuf+15,Ipkey,strlen(Ipkey));
+			strcat(filebuf," >/var/run/wpa_supplicant.conf");
+#if Initprintf
+			printf("ip wifi %s \n",filebuf);
+#endif
+			system(filebuf);
+			// system("wpa_passphrase cardlan 89966666 >/var/run/wpa_supplicant.conf");
+			usleep(50000);
+			system("killall linkwifi.sh");
+			usleep(50000);
+			system("./linkwifi.sh&");
+			usleep(50000);
+			break;
+
+		case 1: // TCP/IP
+		default :
+			COMNET = 1;
+			if((TcpIpBuf[0]>='0')&&(TcpIpBuf[0]<='9')&&(SelfAddress[0]>'0')&&(SelfAddress[0]<='9'))
+			{
+				memset(fileBuffer,0,sizeof(fileBuffer));
+				memset(filebuf,0,sizeof(filebuf));
+				sprintf(filebuf,"nameserver ");
+				memcpy(fileBuffer,SelfAddress+16,16);
+				strcat(filebuf,fileBuffer);
+
+				// nettab = fopen("resolv.conf","a+");
+				//  ret = fseek(nettab,0, SEEK_SET);
+				//   ret = fwrite(filebuf,sizeof(unsigned char),strlen(filebuf),nettab);
+				//  fclose(nettab);
+				// system("cp resolv.conf /etc/");
+				// usleep(50000);
+				// system("rm resolv.conf");
+
+				memset(fileBuffer,'\0',sizeof(fileBuffer));
+				memset(filebuf,'\0',sizeof(filebuf));
+				memcpy(fileBuffer,SelfAddress,16);
+				sprintf(filebuf,"ifconfig eth0 ");
+				strcat(filebuf,fileBuffer);
+				system(filebuf);
+				usleep(50000);
+
+#if Initprintf
+				printf("ip eth0 %s \n",fileBuffer);
+#endif
+
+				memset(fileBuffer,'\0',sizeof(fileBuffer));
+				memcpy(fileBuffer,SelfAddress+16,16);
+				sprintf(filebuf,"route add default gw ");
+				strcat(filebuf,fileBuffer);
+				system(filebuf);
+				usleep(50000);
+				system("route&");
+
+			}
+			else
+			{
+				system("killall -9 udhcpc");
+				system("udhcpc &");
+				usleep(50000);
+			}
+			break;
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu,432, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);	//保存记录条数
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x01\x00\x00\x00\x01\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,432, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu,432, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(SaveNum.longbuf,FileBuf,4);
+			memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+			SaveNumBc.i = SaveNumBs.i = SaveNum.i ;
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(SaveNum.longbuf,FileBuf,4);
+			memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+			SaveNumBc.i = SaveNumBs.i = SaveNum.i ;
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu,448, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,448, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu,448, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(Driver.intbuf,FileBuf,2);
+
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(Driver.intbuf,FileBuf,2);
+		}
+
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		result = fseek(canshu,464, SEEK_SET);
+		result = fread(fileBuffer,sizeof(unsigned char),16,canshu); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00\0x00",9) == 0)
+		{
+			memset(fileBuffer,0,sizeof(fileBuffer));
+			for(i=0; i<2; i++)
+			{
+				des_encrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			result = fseek(canshu,464, SEEK_SET);
+			result = fwrite(fileBuffer,sizeof(unsigned char),16,canshu);
+
+			result = fseek(canshu,464, SEEK_SET);
+			memset (fileBuffer,0,sizeof(fileBuffer));
+			result = fread(fileBuffer,sizeof(unsigned char),16,canshu);
+
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Section.SationNum,fileBuffer,10);
+
+
+		}
+		else
+		{
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Section.SationNum,fileBuffer,10);
+		}
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu,480, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\xAA\x00\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,480, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu,480, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			ReadCardFirst = FileBuf[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			ReadCardFirst = FileBuf[0];
+		}
+
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		result = fseek(canshu,496, SEEK_SET);
+		result = fread(fileBuffer,sizeof(unsigned char),16,canshu); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00\0x00",9) == 0)
+		{
+			memset(fileBuffer,0,sizeof(fileBuffer));
+			for(i=0; i<2; i++)
+			{
+				des_encrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			result = fseek(canshu,496, SEEK_SET);
+			result = fwrite(fileBuffer,sizeof(unsigned char),16,canshu);
+
+			result = fseek(canshu,496, SEEK_SET);
+			memset (fileBuffer,0,sizeof(fileBuffer));
+			result = fread(fileBuffer,sizeof(unsigned char),16,canshu);
+
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Sectionup.SationNum,fileBuffer,6);
+		}
+		else
+		{
+			for(i=0; i<2; i++)
+			{
+				des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+			}
+			memcpy(&Sectionup.SationNum,fileBuffer,6);
+		}
+
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu,512, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu); //保存司机编号
+		if(mystrncmp(FileBuf,"\x00\x00\x00\x00\x00\x00\x00\x00",8) == 0)
+		{
+			memcpy(FileBuf,"\x00\x01\x00\x00\x00\x00\x00\x00",8);
+			des_encrypt(&ctx, FileBuf, FileBuf);
+			result = fseek(canshu,512, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+			result = fseek(canshu,512, SEEK_SET);
+			memset (FileBuf,0,sizeof(FileBuf));
+			result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(&Section.Updown,FileBuf,4);
+			SectionNum = Section.SationNum[0];
+		}
+		else
+		{
+			des_decrypt(&ctx, FileBuf, FileBuf);
+			memcpy(&Section.Updown,FileBuf,4);
+			if(Section.Updown  == 0)
+			{
+				SectionNum = Section.SationNum[0];
+			}
+			else
+			{
+				SectionNum = Sectionup.SationNum[0];
+			}
+		}
+
+
+
+#if Initprintf
+		printf("DevNum = %d\n",DevNum.i);
+		printf("LanSec= %d,%d,%d,%d,%d,%d,%d\n",\
+		       LanSec.One,LanSec.Two,LanSec.Thr,LanSec.For,LanSec.Fiv,LanSec.Six,LanSec.Sev);  //LanSec.Zer,
+		printf("LanSec ADFNUM= %02X%02X\n",LanSec.ADFNUM[0],LanSec.ADFNUM[1]);  //LanSec.Zer,
+		memcpy(Infor.intbuf,TcpIpBuf+32,2);
+		printf("TcpIpBuf = %s,%d \n",TcpIpBuf,Infor.i);
+		printf("SelfAddress = %s \n",SelfAddress);
+		printf("DevSID = %04d \n",DevSID.i);
+		printf("CodeNum.i = %05d \n",CodeNum.i);
+		printf("SaveNum.i = %05d \n",SaveNum.i);
+		printf("TransactionNum.i = %05d \n",TransactionNum.i);
+		printf("OPENBEEP = %05d \n",OPENBEEP);
+		printf("Driver = %05d \n",Driver.i);
+		printf("Section down = %d \n",Section.SationNum[0]);
+		printf("Section up = %d \n",Sectionup.SationNum[0]);
+		printf("Section Enable = %02X \n",Section.Enable);
+		printf("ReadCardFirst = %02X \n",ReadCardFirst);
+#endif
+
+		fclose(canshu);
+		break;
+
+	case SELFIP:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memcpy(filebuf,SelfAddress,32);
+		for(i = 0; i < 4; i ++)
+		{
+			des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		result = fseek(canshu,384, SEEK_SET);
+		result = fwrite(filebuf,sizeof(unsigned char),40,canshu);
+
+		result = fseek(canshu, 384, SEEK_SET);
+		memset (filebuf,0,sizeof(filebuf));
+		result = fread(filebuf,sizeof(unsigned char),40,canshu);
+		for(i = 0; i < 4; i ++)
+		{
+			des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		memcpy(SelfAddress,filebuf,32);
+		fclose_nosync(canshu);
+		break;
+
+	case MUSERKEY://更改密钥
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memcpy(FileBuf,KeyDes,8);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,0, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+		result = fseek(canshu, 0, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(KeyDes,FileBuf,8);
+		fclose_nosync(canshu);
+		break;
+
+	case MTEMNO:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,DevNum.longbuf,4);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,16, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu, 16, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(DevNum.longbuf,FileBuf,4);
+		memcpy(PsamNum+2,FileBuf,4);
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("MTEMNO  DevNum==%d \n",DevNum.i);
+#endif
+
+		break;
+
+	case MUESRPWD:	//修改管理员密码
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memcpy(FileBuf,AdminPwd,8);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,32, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu, 32, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(AdminPwd,FileBuf,8);
+		fclose_nosync(canshu);
+		break;
+
+	case MUSERSETOR:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memcpy(FileBuf,&LanSec,8);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,64, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,LanSec.ADFNUM,2);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,128, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+		fclose_nosync(canshu);
+		break;
+
+	case MSEVERIP:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memcpy(filebuf,TcpIpBuf,40);
+		for(i = 0; i < 5; i ++)
+		{
+			des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		result = fseek(canshu,80, SEEK_SET);
+		result = fwrite(filebuf,sizeof(unsigned char),40,canshu);
+
+		result = fseek(canshu, 80, SEEK_SET);
+		memset (filebuf,0,sizeof(filebuf));
+		result = fread(filebuf,sizeof(unsigned char),40,canshu);
+		for(i = 0; i < 5; i ++)
+		{
+			des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		memcpy(TcpIpBuf,filebuf,40);
+		fclose_nosync(canshu);
+		break;
+
+	case OPERADORED:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		FileBuf[0] = OperCount;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,192, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu, 192, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		OperCount = FileBuf[0];
+		fclose_nosync(canshu);
+		break;
+
+	case SLEEPOVER:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0] = SleepOverTime;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,48, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu, 48, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		SleepOverTime = FileBuf[0];
+		fclose_nosync(canshu);
+		break;
+
+	case DEVSERIALID:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,DevSID.longbuf,4);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,144, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu, 144, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(DevSID.longbuf,FileBuf,4);
+		fclose_nosync(canshu);
+		break;
+
+	case CODEFILE:   //保存记录数
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,CodeNum.longbuf,4);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,160, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu, 160, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(CodeNum.longbuf,FileBuf,4);
+		//fclose(canshu);
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("CODEFILE CodeNum==%d \n",CodeNum.i);
+#endif
+		break;
+
+	case RCODEFILE:   //读记录数
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 160, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(CodeNum.longbuf,FileBuf,4);
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("RCODEFILE CodeNum==%d \n",CodeNum.i);
+#endif
+		break;
+
+	case OPENBUTTON:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0] = OPENBEEP;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,176, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		result = fseek(canshu,176, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		OPENBEEP = FileBuf[0];
+		fclose_nosync(canshu);
+		break;
+
+	case  OPERBUFFER:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memcpy(filebuf,OperBuffor,80);
+		for(i = 0; i < 10; i ++)
+		{
+			des_encrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		result = fseek(canshu,1024, SEEK_SET);
+		result = fwrite(filebuf,sizeof(unsigned char),80,canshu);
+
+		result = fseek(canshu, 1024, SEEK_SET);
+		memset (filebuf,0,sizeof(filebuf));
+		result = fread(filebuf,sizeof(unsigned char),80,canshu);
+		for(i = 0; i < 10; i ++)
+		{
+			des_decrypt(&ctx, filebuf+i*8, filebuf+i*8);
+		}
+		memcpy(OperBuffor,filebuf,80);
+		fclose_nosync(canshu);
+		break;
+
+	case  WSDATA:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,SaveNum.longbuf,4);
+		memcpy(FileBuf + 4,TransactionNum.longbuf,4);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,432, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+		result = fseek(canshu,432, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(SaveNum.longbuf,FileBuf,4);
+		memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+		SaveNumBc.i = SaveNumBs.i = SaveNum.i;
+		//fclose(canshu);
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("WSDATA SaveNum=%d, TransactionNum=%d\n", SaveNum.i, TransactionNum.i);
+#endif
+		break;
+
+	case  RSDATA:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu, 432, SEEK_SET);
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(SaveNum.longbuf,FileBuf,4);
+		memcpy(TransactionNum.longbuf,FileBuf + 4,4);
+		SaveNumBc.i = SaveNumBs.i = SaveNum.i ;
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("RSDATA SaveNum=%d, TransactionNum=%d\n", SaveNum.i, TransactionNum.i);
+#endif
+		break;  //Driver
+
+
+
+	case  DRIVER:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(FileBuf,0,sizeof(FileBuf));
+		memcpy(FileBuf,Driver.intbuf,2);
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,448, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu,448, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		memcpy(Driver.intbuf,FileBuf,2);
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("DRIVER Driver ==%d \n",Driver.i);
+#endif
+		break;
+
+//
+
+	case  SETSECTION:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		memcpy(fileBuffer,&Section.SationNum,10);
+
+		for(i=0; i<2; i++)
+		{
+			des_encrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+		}
+
+		result = fseek(canshu,464, SEEK_SET);
+		result = fwrite(fileBuffer,sizeof(unsigned char),16,canshu);
+
+		result = fseek(canshu,464, SEEK_SET);
+
+		memset (fileBuffer,0,sizeof(fileBuffer));
+		result = fread(fileBuffer,sizeof(unsigned char),16,canshu);
+		for(i=0; i<2; i++)
+		{
+			des_decrypt(&ctx, fileBuffer+i*8, fileBuffer+i*8);
+		}
+		memcpy(&Section.SationNum,fileBuffer,10);
+
+#if Initprintf
+		printf(" set Section %d  Ena=%02X  \n",Section.SationNum[0],Section.Enable);
+#endif
+		break;
+
+	case SETCARDFIRST:
+
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		printf("gc canshu is %d \n",canshu);
+		memset(FileBuf,0,sizeof(FileBuf));
+		FileBuf[0] = ReadCardFirst;
+		des_encrypt(&ctx, FileBuf, FileBuf);
+		result = fseek(canshu,480, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),8,canshu);
+
+		memset (FileBuf,0,sizeof(FileBuf));
+		result = fseek(canshu,480, SEEK_SET);
+		result = fread(FileBuf,sizeof(unsigned char),8,canshu);
+		des_decrypt( &ctx, FileBuf, FileBuf);
+		ReadCardFirst = FileBuf[0];
+		fclose_nosync(canshu);
+
+#if Initprintf
+		printf("SETCARDFIRST  ==%02X \n",ReadCardFirst);
+#endif
+
+		break;
+
+
+
+	case  SETSECTIONUP:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		memcpy(fileBuffer,&Sectionup.SationNum,6);
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = fseek(canshu,496, SEEK_SET);
+		result = fwrite(fileBuffer,sizeof(unsigned char),8,canshu);
+		result = fseek(canshu,496, SEEK_SET);
+		memset (fileBuffer,0,sizeof(fileBuffer));
+		result = fread(fileBuffer,sizeof(unsigned char),8,canshu);
+		des_decrypt(&ctx, fileBuffer, fileBuffer);
+		memcpy(&Sectionup.SationNum,fileBuffer,6);
+		fclose_nosync(canshu);
+#if Initprintf
+		printf(" set SectionUP %d  \n",Sectionup.SationNum[0]);
+#endif
+		break;
+
+
+	case  SETSECTINO_:
+		canshu = fopen(SYS_PARAM_FILE,"rb+");
+		memset(fileBuffer,0,sizeof(fileBuffer));
+		memcpy(fileBuffer,&Section.Updown,4);
+		des_encrypt(&ctx, fileBuffer, fileBuffer);
+		result = fseek(canshu,512, SEEK_SET);
+		result = fwrite(fileBuffer,sizeof(unsigned char),8,canshu);
+		fclose_nosync(canshu);
+#if Initprintf
+		printf("Set SETSECTINO_ Updown %d  \n",Section.Updown);
+#endif
+		break;
+
+	default :
+		break;
+	}
+	
+//	system("sync");
+}
+
+#endif
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char Number(unsigned int CardNumber,unsigned char cmd)
+- 函数说明 : 黑名单读写
+- 输入参数 :
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+unsigned char Number(unsigned int CardNumber,unsigned char cmd)
+{
+	int result,status;
+	unsigned int CardByte,CardBit;
+	unsigned char NumBuf,i;
+	unsigned char FileBuf[8];
+	
+	memset(FileBuf,0,sizeof(FileBuf));
+	CardByte = CardNumber/8;
+	CardBit = CardNumber%8;
+	BlackFile = fopen("/mnt/record/Blacklist.sys","rb+");
+	result = fseek(BlackFile,CardByte, SEEK_SET);
+	result = fread(FileBuf,sizeof(unsigned char), 2, BlackFile);
+	switch(cmd)
+	{
+	case 0:										//下载
+		NumBuf = 0x01;
+		NumBuf = NumBuf << CardBit;
+		FileBuf[0] = FileBuf[0] | NumBuf;
+		result = fseek(BlackFile,CardByte, SEEK_SET);
+		result = fwrite(FileBuf,sizeof(unsigned char),2,BlackFile);
+		status = 0;
+		break;
+	case 1:
+		NumBuf = 0x01;
+		NumBuf = NumBuf << CardBit;
+		if((NumBuf & FileBuf[0]))
+		{
+			NumBuf = 0xFE;
+			for(i = 0; i < CardBit; i++) NumBuf = (NumBuf << 1)|0x01;
+			FileBuf[0] = FileBuf[0] & NumBuf;
+			result = fseek(BlackFile,CardByte, SEEK_SET);
+			result = fwrite(FileBuf,sizeof(unsigned char),2,BlackFile);
+		}				//解挂
+		status = 0;
+		break;
+	case 2:
+		status = FileBuf[0] >> CardBit;
+		status = status&0x01;
+		break;
+	}
+	fclose(BlackFile);
+	return(status);
+}
+/*
+*************************************************************************************************************
+- 函数名称 : void Card_SysInit(void)
+- 函数说明 : 数据初始化
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+//00 - 08   读取密钥
+//16 - 24   读取终端机
+//32 - 40   管理员密码
+//272 - 312 IP地址
+//512 - 514 读取用户扇区
+//528 - 528 更改进车流程
+//544 - 560 服务器等待时间
+//560 - 576 更改待机时间
+//596 - 612 更改打印机状态
+//613 - 628 进车交易流水号
+//629 - 644 出车交易流水号
+//1024 + 8  采集记录指针
+//1040      按鍵声打开
+void Card_SysInit(void)
+{
+	//while (FileOpenFlag == 0);
+	//    FileOpenFlag = 0;
+	ReadOrWriteFile (SYSFILE);
+	//    FileOpenFlag = 1;
+}
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char Para_cardlan(unsigned char *buf,unsigned int Addr,unsigned char Long,unsigned char Mode)
+- 函数说明 : 创建 读写 参数表
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+unsigned char Para_cardlan(unsigned char *buf,unsigned int Addr,unsigned char Long,unsigned char Mode)
+{
+	int result;
+
+	if(Mode>1)
+	{
+		if(access("/mnt/record/section.bin",0)!= 0)
+		{
+			ParaFileBuf = fopen("/mnt/record/section.bin","a+");
+			if(ParaFileBuf < 0)
+			{
+				return -1;
+			}
+			fclose(ParaFileBuf);
+			usleep(1000);
+		}
+	}
+
+	switch(Mode)
+	{
+	case 0:
+		ParaFileBuf = fopen("/mnt/record/cardlan.bin","rb+");
+		result = fseek(ParaFileBuf, Addr, SEEK_SET);
+		result = fwrite(buf,sizeof(unsigned char),Long,ParaFileBuf);
+		fclose(ParaFileBuf);
+		break;
+
+	case 1:
+		ParaFileBuf = fopen("/mnt/record/cardlan.bin","rb+");
+		result = fseek(ParaFileBuf, Addr, SEEK_SET);
+		result = fread(buf,sizeof(unsigned char),Long,ParaFileBuf);
+		fclose(ParaFileBuf);
+		break;
+
+	case 2:
+		ParaFileBuf = fopen("/mnt/record/section.bin","rb+");
+		result = fseek(ParaFileBuf, Addr, SEEK_SET);
+		result = fwrite(buf,sizeof(unsigned char),Long,ParaFileBuf);
+		fclose(ParaFileBuf);
+		break;
+
+	case 3:
+		ParaFileBuf = fopen("/mnt/record/section.bin","rb+");
+		result = fseek(ParaFileBuf, Addr, SEEK_SET);
+		result = fread(buf,sizeof(unsigned char),Long,ParaFileBuf);
+		fclose(ParaFileBuf);
+		break;
+
+	default :
+		break;
+	}
+	return 0;
+}
+/*
+*************************************************************************************************************
+- 函数名称 : void CardLanFile (unsigned char RW_Type)
+- 函数说明 : 读取参数表
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+void CardLanFile (unsigned char RW_Type)
+{
+	FILE *ParaFile;
+	int result;
+	unsigned char buffer[512];
+	unsigned char i;
+
+	printf("---->you are in cardlanfile------>\n");
+	switch(RW_Type)
+	{
+	case SYSFILE: //
+		free(CardLanBuf);
+		CardLanBuf = NULL;
+		CardLanBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
+		
+	#if Yantai_Qixia
+		if(CardLanBuf!=NULL)
+		{
+			if(CheckLineCardlanBin(Section.Linenum[0],Section.Linenum[1])==0){
+				UpdateLinePara(Section.Linenum[0],Section.Linenum[1]);
+				}
+			else{
+				printf("---------this line has a problem,use the defualt para file----------------\n");
+				memset (CardLanBuf,0,sizeof(CardLanBuf));
+				ParaFile = fopen("/mnt/record/cardlan.sys","rb+");
+				for(i = 0; i<32; i++)
+				{
+					memset(buffer,0,sizeof(buffer));
+					result = fseek(ParaFile, i*512, SEEK_SET);
+					result = fread(buffer,sizeof(unsigned char),512,ParaFile);
+					memcpy(CardLanBuf+i*512,buffer,512);
+				}
+				fclose(ParaFile);
+			}
+			//printf("out of cardlanfile ----------\n");
+		}
+	#else 
+		if(CardLanBuf != NULL)
+		{
+			memset (CardLanBuf,0,sizeof(CardLanBuf));
+			ParaFile = fopen("/mnt/record/cardlan.sys","rb+");
+			for(i = 0; i<32; i++)
+			{
+				memset(buffer,0,sizeof(buffer));
+				result = fseek(ParaFile, i*512, SEEK_SET);
+				result = fread(buffer,sizeof(unsigned char),512,ParaFile);
+				memcpy(CardLanBuf+i*512,buffer,512);
+			}
+			fclose(ParaFile);
+		}
+		
+	#endif	
+		break;
+
+	case SectionPar://
+		free(SectionParBuf);
+		SectionParBuf = NULL;
+		SectionParBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
+		if(SectionParBuf != NULL)
+		{
+			ParaFile = fopen("/mnt/record/section.sys","rb+");
+			for(i = 0; i<32; i++)
+			{
+				memset(buffer,0,sizeof(buffer));
+				result = fseek(ParaFile, i*512, SEEK_SET);
+				result = fread(buffer,sizeof(unsigned char),512,ParaFile);
+				memcpy(SectionParBuf+i*512,buffer,512);
+			}
+			fclose(ParaFile);
+		}
+		break;
+
+	case SectionParup://
+		free(SectionParUpBuf);
+		SectionParUpBuf = NULL;
+		SectionParUpBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
+		if(SectionParUpBuf != NULL)
+		{
+			ParaFile = fopen("/mnt/record/sectionup.sys","rb+");
+			for(i = 0; i<32; i++)
+			{
+				memset(buffer,0,sizeof(buffer));
+				result = fseek(ParaFile, i*512, SEEK_SET);
+				result = fread(buffer,sizeof(unsigned char),512,ParaFile);
+				memcpy(SectionParUpBuf+i*512,buffer,512);
+			}
+			fclose(ParaFile);
+		}
+		break;
+
+	default :
+		break;
+	}
+
+	FindUpdoorType();
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : char FindSavedata(void)
+- 函数说明 : 读取记录指针
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+/*
+FILE *OPENSAVEDATA(void)
+{
+    FILE *file;
+    pthread_mutex_lock(&m_datafile);
+    file = fopen("cardsave.bin","rb+");
+    return file;
+}
+
+
+void CLOSESAVEDATA(FILE *file)
+{
+    fclose(file);
+    pthread_mutex_unlock(&m_datafile);
+}
+*/
+
+char FindSavedata(void)
+{
+	unsigned short i,t;
+	int result;
+	unsigned int addr,savedata;
+	unsigned char buff[72];
+	unsigned char dbuff[16];
+//  unsigned char aa;
+
+	//  while(savedataflag);
+	//     savedataflag =1;
+
+	pthread_mutex_lock(&m_datafile);
+#ifdef SAVE_CONSUM_DATA_DIRECT
+	Datafile = open(OFF_LINE_CONSUM_FILE,O_RDWR|O_SYNC);
+#else
+	Datafile = fopen(OFF_LINE_CONSUM_FILE,"rb+");
+#endif
+	for(i=0; i<500; i++)
+	{
+		addr = i*72000;
+#ifdef SAVE_CONSUM_DATA_DIRECT
+		result = lseek(Datafile,addr, SEEK_SET);
+		memset(buff,0,sizeof(buff));
+		result = read(Datafile,buff,64);
+#else
+		result = fseek(Datafile,addr, SEEK_SET);
+		memset(buff,0,sizeof(buff));
+		result = fread(buff,sizeof(unsigned char),64,Datafile);
+#endif		
+#if Initprintf
+		//   printf("FindS 1==:");
+		// for(aa= 0;aa< 64;aa++)
+		//   {
+		//     printf("%02X",buff[aa]);
+		//   }
+		//  printf("\n");
+#endif
+		for(t=0; t<8; t++)
+		{
+			memset(dbuff,0,sizeof(dbuff));
+			memcpy(dbuff,buff+t*8,8);
+			if(mystrncmp(dbuff,"\x00\x00\x00\x00\x00\x00\x00\x00",8) != 0)
+			{
+				t = 0;
+				break;
+			}
+		}
+		if(t >= 8)
+		{
+#if Initprintf
+			printf("FindSavedata  iii  1=%d  \n", i);
+#endif
+			break;
+		}
+	}
+
+	if(i > 0)
+	{
+		savedata = (i-1)*72000;
+
+#if Initprintf
+		printf("FindSavedata  savedata=%d  \n", savedata);
+#endif
+		for(i = 0; i<1000; i++)
+		{
+			addr = savedata + i*72;
+#ifdef SAVE_CONSUM_DATA_DIRECT
+			result = lseek(Datafile,addr, SEEK_SET);
+			memset(buff,0,sizeof(buff));
+			result = read(Datafile,buff,64);
+#else
+			result = fseek(Datafile,addr, SEEK_SET);
+			memset(buff,0,sizeof(buff));
+			result = fread(buff,sizeof(unsigned char),64,Datafile);
+#endif
+#if Initprintf
+			//    printf("FindS 2==:");
+			//  for(aa= 0;aa< 64;aa++)
+			//   {
+			//      printf("%02X",buff[aa]);
+			//    }
+			//    printf("\n");
+#endif
+
+			for(t=0; t<8; t++)
+			{
+				memset(dbuff,0,sizeof(dbuff));
+				memcpy(dbuff,buff+t*8,8);
+				if(mystrncmp(dbuff,"\x00\x00\x00\x00\x00\x00\x00\x00",8) != 0)
+				{
+					t = 0 ;
+					break;
+				}
+
+			}
+			if(t >= 8)
+			{
+#if Initprintf
+				printf("FindSavedata  iii2=%d  \n", i);
+#endif
+				break;
+			}
+		}
+		//fclose(Datafile);
+#ifdef SAVE_CONSUM_DATA_DIRECT
+		close(Datafile);
+#else
+		fclose_nosync(Datafile);
+#endif
+		if(i != 1000)
+		{
+			SaveNum.i = (unsigned int)(savedata/72 + i + 1);
+		}
+		else
+		{
+			SaveNum.i = (unsigned int)(savedata/72 + 1001);
+		}
+
+		if (TransactionNum.i < 1)
+		{
+			TransactionNum.i = SaveNum.i;
+		}
+
+#if Initprintf
+		printf("FindSavedata 1 == %d  \n", SaveNum.i);
+#endif
+
+		if(SaveNum.i < 200000)
+		{
+			//  while (FileOpenFlag == 0);
+			//FileOpenFlag = 0;
+			ReadOrWriteFile(WSDATA);
+			//  FileOpenFlag = 1;
+		}
+		else
+		{
+			SavedataErr = 1;
+		}
+	}
+	else
+	{
+		//fclose(Datafile);
+#ifdef SAVE_CONSUM_DATA_DIRECT
+		close(Datafile);
+#else
+		fclose_nosync(Datafile);
+#endif
+
+#ifndef ZHUHAI_DUSHUGAO
+		SaveNum.i = 1;
+		TransactionNum.i = 1;
+		//  while (FileOpenFlag == 0);
+		//FileOpenFlag = 0;
+		ReadOrWriteFile(WSDATA);
+#endif
+		//   FileOpenFlag = 1;
+	}
+
+	if(SaveNum.i > 100000) SavedataErr = 2; //
+
+#if Initprintf
+	printf("FindSavedata 2 == %d  \n", SaveNum.i);
+#endif
+
+	pthread_mutex_unlock(&m_datafile);
+//  savedataflag = 0;
+	return 0;
+}
+
+#if RUSHAN_BUS
+int ReadstationRecord(void)	//读取站点记录，构建站点记录链表
+{
+	FILE *file;
+	int i,recordnum;
+	struct STATION_INFO_ *p,*q;
+	struct stat fileInfo;
+	int len;
+	int status=0;
+	if(access("/mnt/nand1-2/app/stationrecord.bin" , F_OK)==0)
+	{
+		file=fopen("/mnt/nand1-2/app/stationrecord.bin","r+");
+	}
+	else{
+		file=fopen("/mnt/nand1-2/app/stationrecord.bin","w+");
+	}
+
+	if(file!=NULL){
+		printf("/mnt/nand1-2/app/stationrecord.bin ok \n");
+		stat("/mnt/nand1-2/app/stationrecord.bin" , &fileInfo);
+		len=sizeof(struct STATION_INFO_);
+		recordnum= fileInfo.st_size/len;
+		
+		stationhead.pre=NULL;
+		stationhead.next=&stationtaill;
+		stationtaill.pre=&stationhead;
+		stationtaill.next=NULL;
+	
+		pthread_mutex_lock(&m_stationrecord);
+		if(recordnum>0){
+			for(i=0;i<recordnum;i++){
+				p=(struct STATION_INFO_*)malloc(sizeof(struct STATION_INFO_));
+				if(p==NULL){
+					printf("内存不足，无法正常记录站点信息\n");
+					status=-1;
+					break;
+				}
+				stationtaill.pre->next=p;
+				p->next=&stationtaill;
+				p->pre=stationtaill.pre;
+				stationtaill.pre=p;
+			}
+		}
+		pthread_mutex_unlock(&m_stationrecord);
+	}
+	else
+		printf("open /mnt/nand1-2/app/stationrecord.bin failed\n");
+	fclose(file);
+	return status;
+}
+#endif
+
+/*
+*************************************************************************************************************
+- 函数名称 : void Read_Parameter(void)
+- 函数说明 : 读取参数表
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+void Read_Parameter (void)
+{
+	//while(FileCardLan == 0);
+	//    FileCardLan = 0;
+	CardLanFile (SYSFILE);
+	//    FileCardLan = 1;
+}
+
+// added by taeguk calculate CRC16
+extern void Calc_UpdateCrc(void);
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char InitSystem(void)
+- 函数说明 : 初始化数据
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+unsigned char InitSystem(void)
+{
+	FILE *Filebuf;
+
+	system("echo 0 > /proc/sys/vm/dirty_writeback_centisecs;");
+
+	if(access("/mnt/nand1-2/app/cardlan.sys" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/cardlan.sys /mnt/record/");
+	}
+	if(access("/mnt/nand1-2/app/system.sys" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/system.sys /mnt/record/");
+	}
+	if(access("/mnt/nand1-2/app/Blacklist.sys" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/Blacklist.sys /mnt/record/");
+	}
+	if(access("/mnt/nand1-2/app/section.sys" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/section.sys /mnt/record/");
+	}
+	if(access("/mnt/nand1-2/app/sectionup.sys" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/sectionup.sys /mnt/record/");
+	}
+	if(access("/mnt/nand1-2/app/section.bin" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/section.bin /mnt/record/");
+	}
+	if(access("/mnt/nand1-2/app/RecordErrorFile.txt" , F_OK)==0)
+	{
+		system("mv /mnt/nand1-2/app/RecordErrorFile.txt /mnt/record/");
+	}
+#ifdef LEIZHONG_BUS
+	if(access("/mnt/nand1-2/app/cardsave.bin" , F_OK)==0)
+	{
+		system("cp /mnt/nand1-2/app/cardsave.bin /mnt/record/");
+        system("mv /mnt/nand1-2/app/cardsave.bin /mnt/nand1-2/app/cardsave.bin_bak");
+	}
+	if(access("/mnt/nand1-2/app/system.sys" , F_OK)==0)
+	{
+		system("cp /mnt/nand1-2/app/system.sys /mnt/record/");
+        system("mv /mnt/nand1-2/app/system.sys /mnt/nand1-2/app/system.sys_bak");
+	}	
+#endif	
+    system("sync;");
+	bp_fd=open("/dev/fullgpio",O_RDWR);
+	if(bp_fd<0)
+	{
+    	close(bp_fd);
+    	printf("Can't open /dev/fullgpio\n");
+    	return -2;
+	}
+#if NEWBUS
+   beep_fd=open("/dev/beep",O_RDWR);
+    if(beep_fd<0)
+    {
+        close(beep_fd);
+        printf("Can't open /dev/beepgpio\n");
+        return -2;
+    }
+#endif
+	buzz_off();
+	printf("open /dev/fullgpio\n");
+
+	mg_fd=open("/dev/mcugpio",O_RDWR);
+	if(mg_fd<0)
+	{
+		close(mg_fd);
+		printf("Can't open /dev/mcugpio\n");
+		return -2;
+	}
+
+	mf_fd=open("/dev/typea",O_RDWR);
+	if(mf_fd<0)
+	{
+		printf("Can't open /dev/typea \n");
+		close(mf_fd);
+		exit(-2);
+	}
+   
+	printf("open /dev/typea\n");
+
+	 system("chmod 755 "SYS_PARAM_FILE);
+	 
+#ifdef	SAVE_CONSUM_DATA_DIRECT
+	canshu = open(SYS_PARAM_FILE,O_SYNC|O_RDWR|O_CREAT);
+	if(canshu)
+	{
+		printf("open system.sys ok!\n");
+		close(canshu);
+	}
+
+#else
+	canshu = fopen(SYS_PARAM_FILE,"a+");
+	if(canshu)
+	{
+		printf("open system.sys ok!\n");
+		fclose(canshu);
+	}
+#endif	
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /system.sys\n");
+		exit(-3);
+	}
+
+	Filebuf = fopen("/mnt/record/cardlan.sys","a+");
+	if(Filebuf)
+	{
+		printf("open /mnt/record/cardlan.sys ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/cardlan.sys\n");
+		exit(-4);
+	}
+
+	BlackFile = fopen("/mnt/record/Blacklist.sys","a+");
+	if(BlackFile)
+	{
+		printf("open /mnt/record/Blacklist.sys ok!\n");
+		fclose(BlackFile);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/Blacklist.sys\n");
+		exit(-4);
+	}
+#ifdef SAVE_CONSUM_DATA_DIRECT
+	Datafile = open(OFF_LINE_CONSUM_FILE,O_RDWR|O_SYNC|O_CREAT);
+#else
+	Datafile = fopen(OFF_LINE_CONSUM_FILE,"a+");
+#endif
+	if(Datafile)
+	{
+		printf("open  cardsave.bin ok!\n");
+#ifdef SAVE_CONSUM_DATA_DIRECT
+		close(Datafile);
+#else
+		fclose(Datafile);	
+#endif
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open cardsave.bin \n");
+		exit(-1);
+	}
+	
+    system("sync;");
+    system("chmod 755 "OFF_LINE_CONSUM_FILE);
+    
+
+	Filebuf = fopen("/mnt/record/section.sys","a+");
+	if(Filebuf)
+	{
+		printf("open /mnt/record/section.sys ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/section.sys\n");
+		exit(-1);
+	}
+
+	Filebuf = fopen("/mnt/record/sectionup.sys","a+");
+	if(Filebuf)
+	{
+		printf("open /mnt/record/sectionup.sys ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/sectionup.sys\n");
+		exit(-1);
+	}
+    g_FgFileOccurError = 0;
+	InitErrorRecordList();
+
+	ReadErrorRecordFile(0);
+
+	w55fa93_setio(GPIO_GROUP_B, 5, 0);
+	usleep(100000);
+	w55fa93_setio(GPIO_GROUP_B, 5, 1);
+
+    relayoff();
+
+	printf("open /dev/mcugpio\n");
+	led_fd=open("/dev/mcugpio",O_RDWR);
+	if(led_fd<0)
+	{
+		printf("Can't open /dev/mcugpio\n");
+		close(led_fd);
+	}
+
+	InitUart(&uart4_fd,"ttyC1",9600);
+	InitCardBin();
+#ifdef ADD_MONEY_SUPPORT    
+    updataflag = 0;
+    ReadOfflineRechrageRecord();
+#endif
+
+#if RUSHAN_BUS
+	ReadstationRecord();						//读取站点记录
+
+#endif
+
+    InitBlackListBuff();        
+	Card_SysInit();  							//系统参数读取	
+	Read_Parameter();							//消费参数读取
+	CardLanFile(SectionPar); //消费参数读取
+	if(Section.Enableup == 0x55)
+	{
+		CardLanFile(SectionParup); //消费参数读取
+	}
+	printf("in inisystem the sectionum :%d\n",SectionNum);
+	
+	FindSavedata();
+
+	TERMAPP_QPBOCTermInit();
+	// added by taeguk calculate CRC16
+	Calc_UpdateCrc();
+	
+
+	system("rm -rf /mnt/nand1-2/app/font/.svn");
+	system("rm -rf /mnt/nand1-2/app/res/.svn");
+	system("rm -rf /mnt/nand1-2/app/sound/.svn");
+	system("rm -rf /mnt/nand1-2/app/.svn");
+	system("rm -rf /mnt/nand1-2/bin/.svn");
+	system("rm -rf /mnt/nand1-2/.svn");
+   
+	system("sync;");
+	
+	printf("%s\n",__DATE__);
+	printf("%s\n",__TIME__);
+
+	system("rm pppd2.tdb");
+	system("rm ppp0.pid");
+
+	return 0;
+}
+
+
+void GetTimData(unsigned int *pdate)
+{
+	time_t t;
+	struct tm * tm;
+	time (&t);
+	tm = localtime (&t);
+
+	*pdate = (((tm->tm_year + 1900)*100*100)+((tm->tm_mon + 1)*100)+tm->tm_mday);		
+	//printf("year: %d , month: %d , day:%d \n",(tm->tm_year + 1900),(tm->tm_mon + 1),tm->tm_mday);
+}
+
+
+

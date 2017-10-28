@@ -1,0 +1,261 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include "psam.h"
+
+#define  PSAMDIS  1
+
+#define  MI_OK   0
+
+
+int psamfd;
+static int  Psamreceive_len[1] = {0};
+static char Psamreceive_buf[128]= {0};
+
+extern unsigned char PsamNum[6];
+extern unsigned char PsamKeySi;
+
+
+char InitPsam(void)
+{
+    int ret;
+   // char HangOne[] = {0x00,0xb0,0x96,0x00,0x06};
+
+    psamfd=open("/dev/psam",O_RDWR);
+    if(psamfd<0)
+    {
+        printf("Can't open /dev/psam \n");
+        return -1;
+    }
+
+    //ioctl(psamfd, BAUD_CMD,3);        //设置波特率  38400   BAUD_9600
+    ioctl(psamfd, BAUD_CMD,BAUD_38400); //设置波特率  9600  Test
+    ioctl(psamfd, SEL_CARD,2);         //选择PSAM卡槽
+    ret = ioctl(psamfd, COLDRESET);    //复位PSAM卡，RATS
+
+#if PSAMDIS
+    printf("reset = %02d\n",ret);
+#endif
+
+    ioctl(psamfd, RECEIVE_LEN, Psamreceive_len);         //取复位数据长度
+
+#if PSAMDIS
+    printf("Psamreceive_len = %d\n",Psamreceive_len[0]);
+#endif
+
+    read(psamfd, Psamreceive_buf, Psamreceive_len[0]);	     //读复位的数据
+
+#if PSAMDIS
+    {
+        int i;
+        printf("reset Rcv:\n");
+        for(i = 0; i < Psamreceive_len[0]; i++)
+        {
+            printf("%02X",Psamreceive_buf[i]);
+        }
+        printf("\n");
+    }
+#endif
+
+	GetPsamID();
+    return 0;
+
+}
+
+
+void ClosePsam(void)
+{
+    close(psamfd);
+}
+
+
+unsigned char PsamCos(char *Intdata, char *Outdata,unsigned char *len)
+{
+    int ret;
+    unsigned char lens;
+
+    lens = *len;
+
+#if PSAMDIS
+    {
+        unsigned char i;
+        printf("\n PsamCos  in:%02d\n",lens);
+        for(i = 0; i<lens; i++)
+        {
+            printf("%02X",Intdata[i]);
+        }
+        printf("\n");
+    }
+#endif
+
+    ret = write(psamfd,Intdata,lens);//TCOS命令
+    if(ret == MI_OK)
+    {
+        ioctl(psamfd, RECEIVE_LEN, Psamreceive_len);
+        read(psamfd, Psamreceive_buf, Psamreceive_len[0]);
+
+		if(Psamreceive_len[0] == 2){
+         memcpy(Outdata,Psamreceive_buf,Psamreceive_len[0]);
+        *len = Psamreceive_len[0];
+		 }
+		else{
+			 memcpy(Outdata,Psamreceive_buf+1,(Psamreceive_len[0]-1));
+			*len = (Psamreceive_len[0]-1);
+		}
+    }
+
+
+#if PSAMDIS
+    {
+        unsigned char i;
+		printf(" PsamCos  out:%02d\n",(Psamreceive_len[0]-1));
+
+        for(i = 0; i < Psamreceive_len[0]; i++)
+        {
+            printf("%02X",Psamreceive_buf[i]);
+        }
+        printf("\n");
+    }
+#endif
+
+    return ret;
+}
+
+
+unsigned char GetPsamID(void)
+{
+    unsigned char status = 1;
+    unsigned char Loop = 1;
+    unsigned char step = 1;
+    unsigned char len;
+    char buff[64];
+    char getpsamnum[] = {0x00,0xb0,0x96,0x00,0x06};
+    char selectapp[]  = {0x00,0xa4,0x04,0x00,0x06,0xbd,0xa8,0xc9,0xe8,0xb2,0xbf};
+    char getpsamkey[] = {0x00,0xb0,0x97,0x00,0x01};
+
+    while(Loop)
+    {
+    switch(step)
+		{
+         case 1:
+		 	 memset(buff,0,sizeof(buff));
+             len = sizeof(getpsamnum);
+             status = PsamCos(getpsamnum,buff,&len);
+             if((status == MI_OK)&&(buff[len-2]== 0x90)&&(buff[len-1]== 0x00))
+             {
+     			memcpy(PsamNum,buff,6);
+				step ++;
+             }
+			 else
+			 	{
+                  Loop  = 0;
+			    }
+             break;
+
+         case 2:
+		     memset(buff,0,sizeof(buff));
+             len = sizeof(selectapp);
+             status = PsamCos(selectapp,buff,&len);
+             if((status == MI_OK)&&(buff[len-2]== 0x90)&&(buff[len-1]== 0x00))
+             {
+     			//memcpy(PsamNum,buff,6);
+				step ++;
+             }
+			 else
+			 	{
+                  Loop  = 0;
+			    }
+             break;
+
+		  case 3:
+			  memset(buff,0,sizeof(buff));
+			  len = sizeof(getpsamkey);
+			  status = PsamCos(getpsamkey,buff,&len);
+			  if((status == MI_OK)&&(buff[len-2]== 0x90)&&(buff[len-1]== 0x00))
+			  {
+				 //memcpy(PsamNum,buff,6);
+				 PsamKeySi = buff[0];
+				 step ++;
+			  }
+			  else
+				 {
+				   Loop  = 0;
+				 }
+			  break;
+
+		  case 4:
+            step = 0;
+			Loop = 0;
+		  	break;
+
+		  default:
+		  	Loop = 0;
+		  	break;
+		}
+    }
+
+#if PSAMDIS
+    printf(" GetPsamID == %d  \n",step);
+#endif
+
+    return step;
+}
+
+
+
+unsigned char PsamApply(void)
+{
+    unsigned char status = 1,len;
+    char buff[64];
+    char HangTwo[] = {0x00,0xa4,0x00,0x00,0x02,0x10,0x03};
+
+    len = sizeof(HangTwo);
+    status = PsamCos(HangTwo,buff,&len);
+    if((status == 0)&&(buff[len-2]== 0x90)&&(buff[len-1]== 0x00))
+    {
+        status = 0;
+    }
+    else
+    {
+        status = 1;
+    }
+
+#if PSAMDIS
+    printf(" PsamApply == %d::------------->\n",status);
+#endif
+
+    return status;
+}
+
+
+unsigned char PsamTacFst(void)
+{
+    unsigned char status = 1,len;
+
+    char buff[50];
+    char Tacbin[]= {0x80,0x1a,0x28,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+
+	len = sizeof(Tacbin);
+    status = PsamCos(Tacbin,buff,&len);
+    if((status == MI_OK)&&(buff[len-2]== 0x90)&&(buff[len-1]== 0x00))
+    {
+        status = 0;
+    }
+	else
+		{
+		status = 1;
+	    }
+
+#if PSAMDIS
+    printf(" PsamTacFst == %d::------------->\n",status);
+#endif
+
+    return status;
+}
+
+
