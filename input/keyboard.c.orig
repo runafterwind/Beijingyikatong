@@ -1,0 +1,384 @@
+/*
+* This program is free software; you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; either version 2 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program; if not, write to the Free Software
+* Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+*/
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <asm/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <linux/input.h>
+
+#include "../gui/InitSystem.h"
+
+#define Diskeyboard   0
+
+/*
+int main (int argc, char **argv)
+{
+	int fd = -1;    // the file descriptor for the device
+	int yalv;   // loop counter
+	size_t read_bytes;   //how many bytes were read
+
+	struct input_event ev[64];   // the events (up to 64 at once)
+	//read() requires a file descriptor, so we check for one, and then open it
+        // /dev/event0
+
+	if (argc != 2)
+		{
+			fprintf(stderr, "usage: %s event-device - probably /dev/input/evdev0\n", argv[0]);
+			exit(1);
+		}
+
+	if ((fd = open(argv[1], O_RDONLY)) < 0)
+		{
+			perror("evdev open");
+			exit(1);
+		}
+
+	while (1)
+	{
+		read_bytes = read(fd, ev, sizeof(struct input_event) * 64);
+
+		if (read_bytes < (int) sizeof(struct input_event))
+			{
+				perror("evtest: short read");
+				exit (1);
+			}
+
+		for (yalv = 0; yalv < (int) (read_bytes / sizeof(struct input_event)); yalv++)
+			{
+				printf("Event: time %ld.%06ld, type %d, code %d, value %d\n",
+				ev[yalv].time.tv_sec, ev[yalv].time.tv_usec, ev[yalv].type,
+				ev[yalv].code, ev[yalv].value);
+			}
+	}
+
+	close(fd);
+	exit(0);
+}
+*/
+
+//#define addrkey0  "/dev/event0"
+//#define addrkey1  "/dev/event1"
+
+
+#define key_index_MAX	4
+
+static int keyfd[key_index_MAX]; /* the file descriptor for the device */
+static int kusb_step;
+static char addrkey[30];
+static char initkeyv = 0 ,stepredkey = 1;
+/*
+*************************************************************************************************************
+- 函数名称 : void closekey(void)
+- 函数说明 : 关闭键盘
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+void closekey(int *p_fd)
+{
+	if(*p_fd >0) {
+		close(*p_fd);
+	}
+	*p_fd = NULL;
+}
+
+
+
+unsigned char readdrives(unsigned char *strs,unsigned char ntype,unsigned char type)
+{
+	unsigned char loop;
+	unsigned char stepa = ntype;
+
+	loop = 1;
+	while(loop)
+	{
+		switch(stepa)
+		{
+		case 1:
+			sprintf(strs,"/dev/input/event0");
+			break;
+
+		case 2:
+			sprintf(strs,"/dev/input/event1");
+			break;
+
+		case 3:
+			sprintf(strs,"/dev/input/event2");
+			break;
+
+		case 4:
+			sprintf(strs,"/dev/input/event3");
+			break;
+			/*
+					case 5:
+						sprintf(strs,"/dev/input/event4");
+						break;
+
+					case 6:
+						sprintf(strs,"/dev/input/event5");
+						break;
+
+					case 7:
+						sprintf(strs,"/dev/input/event6");
+						break;
+
+					case 8:
+						sprintf(strs,"/dev/input/event7");
+						break;
+
+					case 9:
+						sprintf(strs,"/dev/input/event8");
+						break;
+
+					case 10:
+						sprintf(strs,"/dev/input/event9");
+						break;
+
+					case 11:
+						sprintf(strs,"/dev/input/event10");
+						break;
+
+					case 12:
+						sprintf(strs,"/dev/input/event11");
+						break;
+			*/
+
+		default:
+			loop=0;
+			break;
+
+		}
+		if(access(strs, 0) != 0)
+		{
+			if(type)
+			{
+				initkeyv = 0;
+			}
+			if(stepa >= 4)
+			{
+				return -1;
+			}
+			stepa++;
+		}
+		else
+		{
+			loop=0;
+		}
+	}
+
+	return stepa;
+}
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char read_keyboard(void)
+- 函数说明 : 读键值
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+unsigned char read_keyboard(void)
+{
+	int retval;
+	int yalv; /* loop counter */
+	fd_set rfds;
+	struct timeval tv;
+	int read_bytes; /* how many bytes were read */
+
+	struct input_event key_data;
+	unsigned char keyvalue,status;
+	unsigned char addrkeybuf[30]= {0};
+
+	keyvalue = 0xff;
+
+while(1){
+
+	read_bytes= read(keyfd[stepredkey-1],&key_data,sizeof(struct input_event));
+	if((read_bytes<0)&&(errno == EAGAIN)) {
+		printf("gc again \n");
+		stepredkey++;
+		if(stepredkey > 4) {
+			stepredkey = 1;
+		}
+		//search usb key
+		return -1;
+	}
+	else if(read_bytes == sizeof(struct input_event)){
+		if((key_data.code!=0)&&(key_data.type==1)&&(key_data.value==0;)){
+			keyvalue = key_data.code;
+			break;
+		}
+		else{
+			continue;
+		}
+		
+	}
+	else{
+		perror("evtest: short read");
+		closekey(&keyfd[stepredkey-1]);
+		return -1;
+	}
+}
+	return keyvalue;
+
+
+
+
+	/*
+		tv.tv_sec = 0;                   // the rcv wait time
+		tv.tv_usec = 50000;                   // 100ms
+		while(1)
+		{
+			FD_ZERO(&rfds);
+			FD_SET(keyfd[stepredkey-1],&rfds);
+			retval = select(keyfd[stepredkey-1]+1,&rfds,NULL,NULL,&tv);
+			if(retval == -1)
+			{
+				perror("select keyboard ()  ");
+				closekey(&keyfd[stepredkey-1]);
+				return -1;
+			}
+			else if(retval)
+			{
+				//memset(addrkeybuf,0,sizeof(addrkeybuf));
+
+				status = readdrives(addrkeybuf,stepredkey,0);
+				if(status == 0xff)
+				{
+					closekey(&keyfd[stepredkey-1]);
+					return -1;
+				}
+				kusb_step = stepredkey;
+
+				read_bytes= read(keyfd[stepredkey-1],ev,sizeof(struct input_event) * 64);
+				if (read_bytes < (int)sizeof(struct input_event))
+				{
+					perror("evtest: short read");
+					closekey(&keyfd[stepredkey-1]);
+					return -1;
+				}
+				for(yalv = 0; yalv < (int) (read_bytes / sizeof(struct input_event)); yalv++)
+				{
+					if((ev[yalv].type == 1)&&(ev[yalv+1].type == 0)&&(ev[yalv].value == 1))
+					{
+						keyvalue = ev[yalv].code;
+	#if  Diskeyboard
+						printf("input value 1 %d \n",keyvalue);
+	#endif
+						break;
+					}
+				}
+				//  printf("input value 2 %d \n",keyvalue);
+				break;
+			}
+			else
+			{
+				stepredkey++;
+				if(stepredkey > 4) {
+					stepredkey = 1;
+				}
+				//search usb key
+				return -1;
+			}
+		}
+		return(keyvalue);
+	*/
+
+
+
+}
+
+
+
+/*
+*************************************************************************************************************
+- 函数名称 : unsigned char updatekey(void)
+- 函数说明 : 打开键盘和读键
+- 输入参数 : 无
+- 输出参数 : 无
+*************************************************************************************************************
+*/
+unsigned char updatekey(void)
+{
+	unsigned char  keyvalue = 0xff;
+
+	if(kusb_step) {			//finded usb key index
+		stepredkey = readdrives(addrkey,kusb_step,1);
+
+		if(keyfd[stepredkey-1] == 0) {
+			if((keyfd[stepredkey-1] = open(addrkey, O_RDONLY|O_NONBLOCK)) < 0)
+			{
+				printf("%s open1 fail\n",addrkey);
+				keyfd[stepredkey-1] =0;
+				return -1;
+			}
+		}
+		keyvalue = read_keyboard();
+		if(keyvalue != 0xff)
+		{
+			beepopen(1);
+		}
+
+	}
+	else {
+		stepredkey = readdrives(addrkey,stepredkey,1);
+
+		if(stepredkey != 0xff)
+		{
+
+			if(keyfd[stepredkey-1] == 0) {
+				if((keyfd[stepredkey-1] = open(addrkey, O_RDONLY|O_NONBLOCK)) < 0)
+				{
+					printf("%s open fail\n",addrkey);
+					keyfd[stepredkey-1] =0;
+					return -1;
+				}
+			}
+			/*
+					if(initkeyv == 0)
+					{
+						//closekey();
+						if((keyfd = open(addrkey, O_RDONLY)) < 0)
+						{
+							perror("evdev open Err");
+							initkeyv =0;
+							// closekey();
+							return -1;
+						}
+						initkeyv ++;
+					}
+			*/
+			keyvalue = read_keyboard();
+			if(keyvalue != 0xff)
+			{
+				beepopen(1);
+			}
+
+		}
+		else
+		{
+			stepredkey = 1;
+		}
+	}
+	return  (keyvalue);
+}
+

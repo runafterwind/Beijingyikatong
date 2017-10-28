@@ -1,0 +1,57 @@
+﻿北京项目参数定义：
+
+文件：/mnt/record/Cardlan.sys
+
+1、本地卡卡类及折率表
+偏移地址：0x200-0x47F
+结构定义：
+//记录体结构
+typedef struct {
+    unsigned char phycardtype;          //卡片物理类型
+    unsigned char logiccardtype;        //卡片逻辑卡类型        13种卡
+    unsigned char cardattr;             //卡片属性   0x01:普通储值卡    0x02:计次卡     0x03:定期卡   0x04:特殊储值卡
+    unsigned char consumemode;          //收费模式   高4位使用模式  低4位表示提示模式
+    unsigned char minblancelimit[2];    //最小余额限制  卡内余额小于此金额不允许交易  单位分
+    unsigned char overdraw[2];          //最大透支限额  单位分
+    unsigned char maxblancelimit[4];    //最大余额限制  卡内余额大于此金额不允许交易  单位分
+    unsigned char maxdebit[2];          //最大扣款额度
+    unsigned char indiscontrate;        //界内优惠率
+    unsigned char indiscontlimit[2];    //界内优惠额度
+    unsigned char outdiscontrate;       //界外优惠率
+    unsigned char outdiscontlimit[2];   //界外优惠额度
+    unsigned char none[28];             //预留
+}CardRate;
+
+
+2、交通部互通卡卡类及折率表
+偏移地址：0x480-0x6ff
+结构定义:
+
+typedef struct {
+    unsigned char cardissuerlabel[8];   //发卡机构标识
+    unsigned char logiccardtype;        //卡片逻辑卡类型        13种卡   
+    unsigned char consumemode;          //收费模式   高4位使用模式  低4位表示提示模式    
+    unsigned char overdraw[2];          //最大透支限额  单位分
+    unsigned char maxblancelimit[4];    //最大余额限制  卡内余额大于此金额不允许交易  单位分
+    unsigned char maxdebit[2];          //最大扣款额度
+    unsigned char indiscontrate;        //界内优惠率
+    unsigned char indiscontlimit[2];    //界内优惠额度
+    unsigned char outdiscontrate;       //界外优惠率
+    unsigned char outdiscontlimit[2];   //界外优惠额度
+    unsigned char none[24];             //预留
+}CardRate_remot;
+
+
+
+文件结构定义：
+1、上行公里数文件
+文件名及路径：/mnt/record/stationdisup.sys       按分段站台金额存储
+
+1、下行公里数文件
+文件名及路径：/mnt/record/stationdisdown.sys     按分段站台金额存储
+
+
+基本费率文件
+文件名及路径：/mnt/record/basicrate.sys          用于设备工作时基本信息调用。
+调用函数：ReadandWriteBasicRateFile()		
+
