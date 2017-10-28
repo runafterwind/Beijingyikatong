@@ -2605,9 +2605,11 @@ void CardLanFile (unsigned char RW_Type)
 	unsigned char buffer[512];
 	unsigned char i;
 	unsigned int mkLengthUp, mkLengthDown;
+
 	unsigned char i,j;
 	int max,maxci,ci;
     ShortUnon tmp;
+
 	printf("---->you are in cardlanfile------>\n");
 	switch(RW_Type)
 	{
@@ -2647,6 +2649,7 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParBuf != NULL)
 		{
+
             tmp.i = 0;
 			memcpy(tmp.intbuf,filem4.uprecordnun,2);
 			ParaFile = fopen("/mnt/record/M4","rb+");
@@ -2664,6 +2667,7 @@ void CardLanFile (unsigned char RW_Type)
 	            }
 	         }  
 			
+
 			fclose(ParaFile);
 		}
 		break;
@@ -2859,6 +2863,7 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len)
     switch(type)
 	{
     //写上行参数
+
 	case 0:
 			/*
 	        max = flc0005.gupstationnum;
@@ -2879,16 +2884,19 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len)
 		ParaFile = fopen("/mnt/record/M4","rb+");
 		result = fseek(ParaFile, offset, SEEK_SET);
 	    result = fwrite(dat,sizeof(unsigned char),len,ParaFile);
+
         CardLanFile(SectionPar);
 		break;
         
     //写下行参数
+
 	case 1:
 		/*
         max = flc0005.gdownstationnum;
         maxci = len/2;
         ci = 0;
         ParaFile = fopen("/mnt/record/M4","rb+");        
+
 		for(i=0;i<max;i++) {
            for(j=0;j<=i;j++){
             result = fseek(ParaFile, (i*max+j)*2, SEEK_SET);
@@ -2899,10 +2907,11 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len)
         }
          }  
 		fclose(ParaFile);	
+
 		*/
 		ParaFile = fopen("/mnt/record/M4","rb+");
 		result = fseek(ParaFile, offset, SEEK_SET);
-	    result = fwrite(dat,sizeof(unsigned char),len,ParaFile);
+
         CardLanFile(SectionParup);
 		break;	      
         
@@ -2924,6 +2933,7 @@ void ReadandWriteBasicRateFile(unsigned char type)
     switch(type)
     {
         case 0:
+
              basicrate = fopen("/mnt/record/MP","rb+");
 		     memcpy(filemp.linenum,flc0005.glinenum,2);
 			 filemp.lineattr = flc0005.glineattr;
@@ -2959,6 +2969,7 @@ void ReadandWriteBasicRateFile(unsigned char type)
 			 Sectionup.SationNum[0] = filemp.downpricesitemnum.i;             
              memcpy(Section.DeductTime,flc0005.gbupiaolimittime,2);
              memcpy(Section.Linenum,filemp.linenum,2);
+
              break;
 
         default :
@@ -3516,6 +3527,7 @@ unsigned char InitSystem(void)
             exit(-1);
         }
 
+<<<<<<< HEAD
     
 
 

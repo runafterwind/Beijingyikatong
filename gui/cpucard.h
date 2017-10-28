@@ -312,7 +312,7 @@ typedef struct{
 	unsigned char modebj;				//本地未定义卡类型处理模式
 	unsigned char modehl;				//异地未定义卡类型处理模式
 	unsigned char vehicleattr;			//车辆属性
-	unsigned char modelhlbp;			//异地逃跑补票模式
+	unsigned char modehlbp;			//异地逃跑补票模式
 	unsigned char onoffdir;				//上下车方向不同补票规则
 	unsigned char pricediscount;		//补票金额是否打折标识
 	unsigned char funcflag[2];			//功能开关
