@@ -3523,7 +3523,7 @@ unsigned char InitSystem(void)
     ReadandWriteBasicRateFile(1);               //初始化MP文件
 	InitBlackListBuff();                        //系统初始化黑名单
     InitWhiteListBuff();                        //系统初始化白名单    
-	InitYangZhouCard();
+	InitYangZhouCard();							// 初始化
 
 	
 
