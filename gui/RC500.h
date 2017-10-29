@@ -491,7 +491,7 @@ extern unsigned char SectionFares_8bit(void);
 /*奥运专用卡2*/
 #define OLYMPIC_TWO_CARD			0xA2
 
-#define CARD_NUMBER				13
+#define CARD_NUMBER				19
 
 
 /*读取扇区*/
@@ -696,9 +696,6 @@ struct OperatCard_Struct {
 	//struct Oper_Sector_Fifteen OscFifteen;
 };
 
-#define   SECTION_KM_PATH_NAME	 "/mnt/record/M3"
-//每2个站点之间的公里数所占的文件大小
-#define   SECTION_POINT_SIZE		22
 
 struct GetOnOff_Struct{
 	unsigned char On_StationNo;
@@ -709,6 +706,9 @@ struct GetOnOff_Struct{
 	unsigned char Off_Name[19];
 	
 	ShortUnon	  Real_Mileage;
+
+	ShortUnon	  Version; //M3文件版本号
+
 };
 
 extern struct GetOnOff_Struct GetOnOffInfo;

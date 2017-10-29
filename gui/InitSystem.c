@@ -2631,8 +2631,14 @@ void CardLanFile (unsigned char RW_Type)
 		ParaFile = fopen(PARM_FILE_PATH,"rb+");
 		if (NULL != ParaFile)
 		{
-			fseek(ParaFile, 512, SEEK_SET);
+			//fseek(ParaFile, 512, SEEK_SET);
 			fread(LocalCardRate, sizeof(LocalCardRate[0]), CARD_NUMBER, ParaFile);
+			i = 5;
+			result = 0;
+			do {
+				result += fread(StationdisdownParBuf,sizeof(unsigned char),mkLengthDown-result,ParaFile);
+				i--;
+			}while(i && (result != mkLengthDown));
 			fclose(ParaFile);
 		}
 		#endif

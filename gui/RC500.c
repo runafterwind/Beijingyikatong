@@ -10684,6 +10684,7 @@ unsigned int GetSectionAmontFromPara(unsigned char onstation, unsigned char offs
 #endif
 
 // onstation 上车站台编号 offstation 下车站台编号
+//ONSTATION 为0时OFFSTATION 就是为当前站点号
 unsigned int GetSectionKMFromPara(unsigned char onstation, unsigned char offstation)
 {
 	//LongUnon datOn[22], datOff[22];
@@ -10692,19 +10693,23 @@ unsigned int GetSectionKMFromPara(unsigned char onstation, unsigned char offstat
 	memset(&GetOnOffInfo, 0, sizeof(GetOnOffInfo));
 	if (Section.Updown == 0)
 	{
-		memcpy(&GetOnOffInfo.On_StationNo, StationdisupParBuf+onstation*SECTION_POINT_SIZE, SECTION_POINT_SIZE);
+		if (onstation)
+			memcpy(&GetOnOffInfo.On_StationNo, StationdisupParBuf+onstation*SECTION_POINT_SIZE, SECTION_POINT_SIZE);
 		memcpy(&GetOnOffInfo.Off_StationNo, StationdisupParBuf+offstation*SECTION_POINT_SIZE, SECTION_POINT_SIZE);
 	}
 	else
 	{
-		memcpy(&GetOnOffInfo.On_StationNo, StationdisdownParBuf+onstation*SECTION_POINT_SIZE, SECTION_POINT_SIZE);
+		if (onstation)
+			memcpy(&GetOnOffInfo.On_StationNo, StationdisdownParBuf+onstation*SECTION_POINT_SIZE, SECTION_POINT_SIZE);
 		memcpy(&GetOnOffInfo.Off_StationNo, StationdisdownParBuf+offstation*SECTION_POINT_SIZE, SECTION_POINT_SIZE);
 	}
-	if (GetOnOffInfo.On_StationNo == onstation && GetOnOffInfo.Off_StationNo == offstation)
+	//if (GetOnOffInfo.On_StationNo == onstation && GetOnOffInfo.Off_StationNo == offstation)
 		GetOnOffInfo.Real_Mileage.i = GetOnOffInfo.Off_Mileage.i - GetOnOffInfo.On_Mileage.i;
 	
 	return GetOnOffInfo.Real_Mileage.i;
 }
+
+
 
 #endif
 
