@@ -91,6 +91,8 @@ LongUnon SeDriverCard;
 ShortUnon RegisterMoney;
 unsigned char g_UseRegisterMoney;
 CardRate_local LocalCardRate[CARD_NUMBER];
+FileM5_T CardConParam[CARD_NUMBER];
+
 extern unsigned char PsamNum[6];
 extern unsigned char *StationdisupParBuf;
 extern unsigned char *StationdisdownParBuf;
@@ -10560,7 +10562,7 @@ int FindCardTypeAmount(unsigned char logictype, unsigned short balance, unsigned
 	ShortUnon tmp;
 	for(i=0; i<CARD_NUMBER; i++)
 	{
-		if(logictype == LocalCardRate[i].logiccardtype)
+		if(logictype == CardConParam[i].logiccardtype)
 			break;
 	}
 	if (i == CARD_NUMBER) //can't find the card's parameter
@@ -10574,35 +10576,35 @@ int FindCardTypeAmount(unsigned char logictype, unsigned short balance, unsigned
 		}
 	}
 
-	mode = LocalCardRate[i].consumemode & 0xf0;
+	mode = CardConParam[i].consumemode & 0xf0;
 	if (mode != 1 && mode != 2) {
 		return -2; 	  // 此卡在本线路禁止使用
 	}
 
-	if (balance < LocalCardRate[i].minblancelimit.i || balance > LocalCardRate[i].maxblancelimit.i) 
+	if (balance < CardConParam[i].minblancelimit.i || balance > CardConParam[i].maxblancelimit.i) 
 	{
-		printf("balance is error  bal = %u, limit = %u, max = %u \n", balance, LocalCardRate[i].minblancelimit.i, LocalCardRate[i].maxblancelimit.i);
+		printf("balance is error  bal = %u, limit = %u, max = %u \n", balance, CardConParam[i].minblancelimit.i, CardConParam[i].maxblancelimit.i);
 		return -3;
 	}
 	
-	*beepmode = LocalCardRate[i].consumemode & 0x0f;
+	*beepmode = CardConParam[i].consumemode & 0x0f;
 
 	memcpy(tmp.intbuf, flc0005.gbupiaolimittime, 2);
 	if (time_inter > tmp.i)   // 界外的
 	{
-		HostValue.i = (HostValue.i*LocalCardRate[i].outdiscontrate)/100;
+		HostValue.i = (HostValue.i*CardConParam[i].outdiscontrate)/100;
 	}
 	else  // 内
 	{
-		HostValue.i = (HostValue.i*LocalCardRate[i].indiscontrate)/100;
+		HostValue.i = (HostValue.i*CardConParam[i].indiscontrate)/100;
 	}
 
-	if (HostValue.i > LocalCardRate[i].maxdebit.i)
-		HostValue.i = LocalCardRate[i].maxdebit.i;
+	if (HostValue.i > CardConParam[i].maxdebit.i)
+		HostValue.i = CardConParam[i].maxdebit.i;
 	if (HostValue.i > balance)
 	{
 		tmp.i = HostValue.i - balance; // 透支限额
-		if (tmp.i > LocalCardRate[i].overdraw.i)
+		if (tmp.i > CardConParam[i].overdraw.i)
 			return -4;
 	}
 	

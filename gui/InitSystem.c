@@ -2631,14 +2631,20 @@ void CardLanFile (unsigned char RW_Type)
 		ParaFile = fopen(PARM_FILE_PATH,"rb+");
 		if (NULL != ParaFile)
 		{
-			//fseek(ParaFile, 512, SEEK_SET);
-			fread(LocalCardRate, sizeof(LocalCardRate[0]), CARD_NUMBER, ParaFile);
 			i = 5;
 			result = 0;
+			#if 1
 			do {
-				result += fread(StationdisdownParBuf,sizeof(unsigned char),mkLengthDown-result,ParaFile);
+				result += fread(CardConParam+result, sizeof(unsigned char), CARD_NUMBER*sizeof(CardConParam), ParaFile);
 				i--;
-			}while(i && (result != mkLengthDown));
+				if (feof(ParaFile)) break;
+			}while(i && (result != (CARD_NUMBER*sizeof(CardConParam))));
+			#else
+			do {
+				result += fread(CardConParam+sizeof(CardConParam)*result, sizeof(CardConParam), CARD_NUMBER, ParaFile);
+				i--;
+			}while(i && (result != CARD_NUMBER));
+			#endif
 			fclose(ParaFile);
 		}
 		#endif
@@ -2709,9 +2715,11 @@ void CardLanFile (unsigned char RW_Type)
 			//memset(buffer,0,sizeof(buffer));
 			result = fseek(ParaFile, 4, SEEK_SET);
 			i = 5;
+			result = 0;
 			do {
-				result += fread(StationdisupParBuf,sizeof(unsigned char),mkLengthUp-result,ParaFile);
+				result += fread(StationdisupParBuf+result,sizeof(unsigned char),mkLengthUp-result,ParaFile);
 				i--;
+				if (feof(ParaFile)) break;
 			}while(i && (result != mkLengthUp));
 			//memcpy(StationdisupParBuf+i*512,buffer,512);
 		}
@@ -2743,17 +2751,14 @@ void CardLanFile (unsigned char RW_Type)
 			i = 5;
 			result = 0;
 			do {
-				result += fread(StationdisdownParBuf,sizeof(unsigned char),mkLengthDown-result,ParaFile);
+				result += fread(StationdisdownParBuf+result,sizeof(unsigned char),mkLengthDown-result,ParaFile);
 				i--;
+				if (feof(ParaFile)) break;
 			}while(i && (result != mkLengthDown));
 		}
 		fclose(ParaFile);
 		
 		break;
-
-
-
-
 
 	default :
 		break;
