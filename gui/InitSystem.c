@@ -2605,6 +2605,11 @@ void CardLanFile (unsigned char RW_Type)
 	unsigned char buffer[512];
 	unsigned char i;
 	unsigned int mkLengthUp, mkLengthDown;
+
+	unsigned char i,j;
+	int max,maxci,ci;
+    ShortUnon tmp;
+
 	printf("---->you are in cardlanfile------>\n");
 	switch(RW_Type)
 	{
@@ -2656,18 +2661,25 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParBuf != NULL)
 		{
-            #ifdef SAVE_CONSUM_DATA_DIRECT
-			ParaFile = fopen("/mnt/record/section.sys","rb+");
-            #else
-            ParaFile = fopen("/var/run/section.sys","rb+");    
-            #endif
-			for(i = 0; i<32; i++)
-			{
-				memset(buffer,0,sizeof(buffer));
-				result = fseek(ParaFile, i*512, SEEK_SET);
-				result = fread(buffer,sizeof(unsigned char),512,ParaFile);
-				memcpy(SectionParBuf+i*512,buffer,512);
-			}
+
+            tmp.i = 0;
+			memcpy(tmp.intbuf,filem4.uprecordnun,2);
+			ParaFile = fopen("/mnt/record/M4","rb+");
+            max = filem4.uprecord;                         //需要修改根据票价参数定义个数
+	        maxci = tmp.i/2;
+	        ci = 0;
+			ParaFile = fopen("/mnt/record/M4","rb+");
+	        for(i=0;i<max;i++) {
+	            for(j=0;j<=i;j++){
+	                result = fseek(ParaFile, 6, SEEK_SET);
+	                result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
+	                ci++;
+	                if(ci>=maxci)
+	                    break;
+	            }
+	         }  
+			
+
 			fclose(ParaFile);
 		}
 		break;
@@ -2862,30 +2874,40 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len)
     switch(type)
 	{
     //写上行参数
-	case 0: 
-        max = flc0005.gupstationnum;
-        maxci = len/2;
-        ci = 0;
-		ParaFile = fopen("/mnt/record/section.sys","rb+");
-        for(i=0;i<max;i++) {
-            for(j=0;j<=i;j++){
-                result = fseek(ParaFile, (i*max+j)*2, SEEK_SET);
-                result = fwrite(dat+2*ci,sizeof(unsigned char),2,ParaFile);
-                ci++;
-                if(ci>=maxci)
-                    break;
-            }
-         }      
-		fclose(ParaFile);
+
+	case 0:
+			/*
+	        max = flc0005.gupstationnum;
+	        maxci = len/2;
+	        ci = 0;
+			ParaFile = fopen("/mnt/record/M4","rb+");
+	        for(i=0;i<max;i++) {
+	            for(j=0;j<=i;j++){
+	                result = fseek(ParaFile, (i*max+j)*2, SEEK_SET);
+	                result = fwrite(dat+2*ci,sizeof(unsigned char),2,ParaFile);
+	                ci++;
+	                if(ci>=maxci)
+	                    break;
+	            }
+	         }      
+			fclose(ParaFile);
+		*/
+		ParaFile = fopen("/mnt/record/M4","rb+");
+		result = fseek(ParaFile, offset, SEEK_SET);
+	    result = fwrite(dat,sizeof(unsigned char),len,ParaFile);
+
         CardLanFile(SectionPar);
 		break;
         
     //写下行参数
-	case 1:   
+
+	case 1:
+		/*
         max = flc0005.gdownstationnum;
         maxci = len/2;
         ci = 0;
-        ParaFile = fopen("/mnt/record/sectionup.sys","rb+");        
+        ParaFile = fopen("/mnt/record/M4","rb+");        
+
 		for(i=0;i<max;i++) {
            for(j=0;j<=i;j++){
             result = fseek(ParaFile, (i*max+j)*2, SEEK_SET);
@@ -2896,6 +2918,11 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len)
         }
          }  
 		fclose(ParaFile);	
+
+		*/
+		ParaFile = fopen("/mnt/record/M4","rb+");
+		result = fseek(ParaFile, offset, SEEK_SET);
+
         CardLanFile(SectionParup);
 		break;	      
         
@@ -2917,24 +2944,43 @@ void ReadandWriteBasicRateFile(unsigned char type)
     switch(type)
     {
         case 0:
-             basicrate = fopen("/mnt/record/basicrate.sys","rb+");
+
+             basicrate = fopen("/mnt/record/MP","rb+");
+		     memcpy(filemp.linenum,flc0005.glinenum,2);
+			 filemp.lineattr = flc0005.glineattr;
+			 memcpy(filemp.defaultbaseprice.intbuf,flc0005.gbasicpice,2);
+			 filemp.modebj = flc0005.glocalnodefinecard;
+			 filemp.modehl = flc0005.gremotnodefinecard;
+			 filemp.modehlbp = flc0005.gyidibupiaomo;
+			 filemp.onoffdir = flc0005.gruleofupanddowm;
+			 
              result = fseek(basicrate, 0, SEEK_SET);
-             result = fwrite(&flc0005.gblackflag,sizeof(unsigned char),24,basicrate);
+             result = fwrite(&filemp.linenum[0],sizeof(unsigned char),24,basicrate);
+			 
              fclose(basicrate);
-             Section.SationNum[0] = flc0005.gupstationnum;
-             Sectionup.SationNum[0] = flc0005.gdownstationnum;
-             memcpy(Section.DeductTime,flc0005.gbupiaolimittime,2);
-             memcpy(Section.Linenum,flc0005.glinenum,2);
-             ReadOrWriteFile(SETSECTION);
-             ReadOrWriteFile(SETSECTIONUP);
-             ReadOrWriteFile(SETSECTIONLINE);
+          //   Section.SationNum[0] = flc0005.gupstationnum;
+          //   Sectionup.SationNum[0] = flc0005.gdownstationnum;          
+          //   memcpy(Section.Linenum,flc0005.glinenum,2);             
+           //  ReadOrWriteFile(SETSECTIONUP);
+          //   ReadOrWriteFile(SETSECTIONLINE);
+         
+         	memcpy(Section.DeductTime,flc0005.gbupiaolimittime,2);
+			ReadOrWriteFile(SETSECTION);
             break;
 
         case 1:
-             basicrate = fopen("/mnt/record/basicrate.sys","rb+");
+             basicrate = fopen("/mnt/record/MP","rb+");
+			 memcpy(&filemp,0,sizeof(struct FileMP));
              result = fseek(basicrate, 0, SEEK_SET);
-             result = fread(&flc0005.gblackflag,sizeof(unsigned char),24,basicrate);
+             result = fread(&filemp,sizeof(unsigned char),127,basicrate);
              fclose(basicrate);
+			 DBG_PRINTF("费率卡二次信息文件:");
+			 menu_print(filemp.linenum,127);			 
+			 Section.SationNum[0] = filemp.uppricesitemnum.i;			 
+			 Sectionup.SationNum[0] = filemp.downpricesitemnum.i;             
+             memcpy(Section.DeductTime,flc0005.gbupiaolimittime,2);
+             memcpy(Section.Linenum,filemp.linenum,2);
+
              break;
 
         default :
@@ -3493,12 +3539,14 @@ unsigned char InitSystem(void)
         }
 
 
+    
+
 
     Card_SysInit();
-    ReadandWriteBasicRateFile(1);
+    ReadandWriteBasicRateFile(1);               //初始化MP文件
 	InitBlackListBuff();                        //系统初始化黑名单
     InitWhiteListBuff();                        //系统初始化白名单    
-	InitYangZhouCard();
+	InitYangZhouCard();							// 初始化
 
 	
 
