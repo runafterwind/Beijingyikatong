@@ -10018,7 +10018,7 @@ int complexDateDeal()
 
 #ifdef SUPPORT_QR_CODE
 extern unsigned char g_QRCodeRcvDataFg;
-extern unsigned char ConnectFlag; 	
+//extern unsigned char ConnectFlag; 	
 unsigned char QRCode_OldTime[6]={0};
 
 extern struct QRCode G_QRCodeInfo;
@@ -10109,12 +10109,16 @@ unsigned char QRCodeSendToServer(void)
 	memcpy(buffer+i, G_QRCodeInfo.id, G_QRCodeInfo.length);
 	i += G_QRCodeInfo.length;
 	//printf("QRCodeSendToServer len = %d\n", i);
+
+/*
 	#ifdef BS
     return QR_SendCmdPc(buffer, i);
     #else
 	return SendCmdPc(buffer, i);
     #endif
-    
+  */
+  	
+  
 }
 #ifdef TEST_QR_CODE_SPEED
 extern struct timeval second_test;
@@ -10130,7 +10134,8 @@ enum OutPut_Status QRCodeProcessConsume(unsigned char freed)
 	//struct timeval first, second;
 	LongUnon TempMoney;
 
-	if(ConnectFlag /*&& (!g_FgCardLanQRCode)*/)  return QR_ERROR_OFFLINE;	//check network first
+	//if(ConnectFlag /*&& (!g_FgCardLanQRCode)*/)  return QR_ERROR_OFFLINE;	//check network first
+	if(is_net_connect()!=1 || is_server_connect()!=1) return QR_ERROR_OFFLINE;
 	CardLan.CardType = QR_CODE_TYPE;
 	
 	while(Loop)
@@ -10250,7 +10255,8 @@ enum OutPut_Status QRCodeProcessConsume(unsigned char freed)
 					}
 					return QR_ERROR_NO_RESPOND;
 				}
-				if(ConnectFlag) 
+		//		if(ConnectFlag) 
+				if(is_net_connect()!=1 || is_server_connect()!=1)
 				{
 					g_SendScanMarkCnt = 0;
 					return QR_ERROR_OFFLINE;

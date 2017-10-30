@@ -26,10 +26,11 @@
 
 #include "gps.h"
 #include "../gui/InitSystem.h"
+#include "../net/client.h"
 
 #define FALSE 0
 #define TRUE  1
-extern unsigned char ConnectFlag; //上网标志
+//extern unsigned char ConnectFlag; //上网标志
 extern pthread_mutex_t m_socketwrite;
 extern int sockfd;	//
 
@@ -1206,9 +1207,10 @@ void * sendGps_Pthread (void * args)
 	int ret;
 	while(1)
 	{
-		if((ConnectFlag == 0)&&(GPSSIG==0))
+		//if((ConnectFlag == 0)&&(GPSSIG==0))
+		if((is_net_connect()== 1)&&(GPSSIG==0)&&(is_server_connect()==1))
 		{
-            DebugPrintf("func=%s:line=%d\n",__func__,__LINE__);
+            		DebugPrintf("func=%s:line=%d\n",__func__,__LINE__);
 			ret=gpsWaveCOmPc(buffer0);
 			if(ret<0)
 			{

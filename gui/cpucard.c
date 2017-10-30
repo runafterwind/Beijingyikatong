@@ -82,6 +82,8 @@ FileM4 filem4;
 FileM5 filem5;
 FileMP filemp;
 
+FileM5_R CardConParam_remotcard[CARD_NUMBER];
+
 CardRate_local localcard[13];
 
 CardRate_remot remotcard[13];
@@ -5951,9 +5953,9 @@ unsigned char ReadCardInfor_CPU(void)
                     tmp.i = 0;
                     memcpy(tmp.intbuf,receive_buf+1,2);
 
-					tmp1.i = 0;
-					memcpy(tmp1.intbuf,filem4.downrecordnum,2);
-                    WriteSection_Para(1, buff3+3,tmp.i,tmp1.i);
+					//tmp1.i = 0;
+					//memcpy(tmp1.intbuf,filem4.downrecordnum,2);
+                    WriteSection_Para(1, buff3+3,tmp.i,filem4.downrecordnum.i);
 
                     t++;
                     }

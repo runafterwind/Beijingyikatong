@@ -63,7 +63,7 @@ extern CardLanSector LanSec;		//用户扇区
 extern Operat USBFile;
 extern Operat MMCFile;
 extern SectionFarPar Section,Sectionup;
-extern unsigned char ConnectFlag; //上网标志
+//extern unsigned char ConnectFlag; //上网标志
 extern unsigned short SectionNum; //
 extern unsigned int CurIcCardNo;
 
@@ -4335,8 +4335,8 @@ void SectionApp(void)
 
                 SetTextSize(32);
                 SetTextColor(Color_white);
-				DebugPrintf("ConnectFlag = 0x%02X\n", ConnectFlag);
-                Display_signal(ConnectFlag);
+		//DebugPrintf("ConnectFlag = 0x%02X\n", ConnectFlag);
+                Display_signal();
                 if(Section.Updown  == 0x00)
                 {
                     sprintf(Buffer,"上行 站号:%02d",Section.Sationdis);
@@ -4913,7 +4913,7 @@ CRC8 = 0xb8 10111000 (0x1b8 110111000)
 unsigned char CalCRC(unsigned char *ptr, unsigned char len)
 {
     unsigned char i; 
-    unsigned char crc=0x00； /* 计算的初始crc值 */ 
+    unsigned char crc=0x00; /* 计算的初始crc值 */ 
 
     while(len--)
     {
@@ -4956,6 +4956,7 @@ int RetCtrlCmdStatus(char *cmd)//, unsigned char set)
 
 	write(uart4_fd, sendbuf, len);
 	return 0;
+
 }
 void SetBusDeviceStation(unsigned char *buf)
 {
@@ -5010,7 +5011,7 @@ void SetBusDeviceTime(unsigned char *time, unsigned char set_flag)
 	hour = buff[3];
 	min = buff[4];
 	sec = buff[5];
-	memset(buff, 0, siezof(buff));
+	memset(buff, 0, sizeof(buff));
 	if (set_flag == 1)
 	{
 		//sprintf(buff,"20%02x-%02x-%02x %02x:%02x:%02x",Data[4],\
@@ -5068,7 +5069,7 @@ void CheckUARTPacket_beijing(char ch)
 		return;
     }
    memset(cmdstr, 0, sizeof(cmdstr));
-   memcpy(cmdstr, UARTPacket+3, 2)
+   memcpy(cmdstr, UARTPacket+3, 2);
    if (!memcmp(cmdstr, CMD_FUNC_REQ, 2))
    {
 		RetCtrlCmdStatus(CMD_FUNC_REQ);

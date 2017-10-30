@@ -1,7 +1,7 @@
 //包含头文件
 #include  "apparel.h"
 #include "../gui/RC500.h"
-//#include "../gui/cpucard.h"
+#include "../gui/cpucard.h"
 #include "../gui/InitSystem.h"
 #include "../gui/des.h"
 #include "../gui/OnlineRecharge.h"
@@ -12,6 +12,8 @@
 #include "../gui/gps.h"
 #include "../update/resumedownload.h"
 #include "../gui/cpucard.h"
+#include "../net/client.h"
+
 /************************************************************/
 MYBMPFILE *signal_bmp;
 
@@ -22,7 +24,7 @@ extern unsigned char PsamNum[6];
 extern unsigned char PsamNum_bak2[6];
 extern unsigned char Tunion;
 extern unsigned char OPENBEEP;
-extern unsigned char ConnectFlag; //上网标志
+
 extern LongUnon AllMoney;
 extern LongUnon TypeMoney;
 extern LongUnon DevNum;
@@ -121,7 +123,9 @@ struct DRIVER_SEARCH SearchNextPage;
 //线程自锁
 pthread_mutex_t m_sysfile = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t m_datafile = PTHREAD_MUTEX_INITIALIZER; //m_socketwrite
+
 pthread_mutex_t m_socketwrite = PTHREAD_MUTEX_INITIALIZER; //
+
 pthread_mutex_t m_ErrorRecFile = PTHREAD_MUTEX_INITIALIZER; //
 pthread_mutex_t m_ErrorList = PTHREAD_MUTEX_INITIALIZER; //
 pthread_mutex_t m_DisplaySingle = PTHREAD_MUTEX_INITIALIZER; //
@@ -309,6 +313,7 @@ char* mk_time (char* buff)
 
 
 
+#if 0
 void Display_signal(unsigned char type)
 {	
 	//DebugPrintf("type = %u\n", type);
@@ -489,7 +494,37 @@ void Display_signal(unsigned char type)
         
 	pthread_mutex_unlock(&m_DisplaySingle);
 }
+#else
+void Display_signal()
+{
+	int netdevicestatus,serverstatus;
+	netdevicestatus=is_net_connect();
+	serverstatus=is_server_connect();
 
+	
+	int len1=strlen("正在拨号中");
+	int len2 = strlen("正在连接服务器");	
+	int MAXLen=len1>len2?len1:len2;	
+
+	if(netdevicestatus==1)
+		{
+			;
+		}
+	else{
+			TextOut_fontSize(MAXLEN-len1*8,10,"正在拨号中", 16);
+			return ;
+	}
+
+	if(serverstatus==1)
+		{
+			Show_BMP(100,10,"sigbmp.bmp");
+		}
+	else{
+			TextOut_fontSize(MAXLEN-len2*8, 10, "正在连接服务器", 16);
+		}
+	
+}
+#endif
 
 
 void * main_timer (void * args)
@@ -863,7 +898,7 @@ int main(int argc,const char** argv)
 	}	
 
 
-	ConnectFlag = 1;
+	
 	freedomflag = 1;
     GPSSIG = 1;    
 	stationup = Section.Updown;
@@ -896,12 +931,12 @@ int main(int argc,const char** argv)
 	param.sched_priority = sched_get_priority_max(SCHED_OTHER);
 	pthread_attr_setschedparam(&attr, &param);
 
-    pthread_create ( &pg, &attr, Gps_Pthread,"AVBC");
-    pthread_create ( &ph, &attr, sendGps_Pthread,"AVBC");
+    	//pthread_create ( &pg, &attr, Gps_Pthread,"AVBC");
+   	 //pthread_create ( &ph, &attr, sendGps_Pthread,"AVBC");
 
 	pthread_create ( &pf, &attr, TimerTask, "AVBC");  
-	pthread_create ( &pb, &attr, ReadGprs_Pthread, "AVBC");		//GPRS读取数据
-	pthread_create ( &pd, &attr, Readsql_Pthread, "AVBC");		//自动上传数据
+	//pthread_create ( &pb, &attr, ReadGprs_Pthread, "AVBC");		//GPRS读取数据
+	//pthread_create ( &pd, &attr, Readsql_Pthread, "AVBC");		//自动上传数据
 #ifdef SUPPORT_QR_CODE
 #if QR_CODE_USE_USBHID
 	pthread_create(&pcc, &attr, UsbHid_Pthread, "AVBC");
@@ -956,41 +991,36 @@ int main(int argc,const char** argv)
               #ifdef NEW0409
                 SetTextSize(48);
                #else
-                SetTextSize(32);
+                SetTextSize(24);
                #endif
 
 
-                Display_signal(ConnectFlag);
 
-                if(Section.Enable != 0x55)
-                {
-                    #ifdef NEW0409
-                        TextOut(0,75, "欢迎使用");
-                    #else
-                        TextOut(100,35, "欢迎使用");
-                    #endif
-                }
-                else
+                Display_signal();
+                
+
                 {
                     memset(Buffer,0,sizeof(Buffer));
+					/*显示线路名和站点*/
+					memcpy(Buffer,filemp.linename,16);
                     /***
-                    需修改显示站名
-                    ***/
+                  			  需修改显示站名
+                  			  ***/
                     if(Section.Updown  == 0x00)
                     {
-                      //  sprintf(Buffer,"上行 站号:%02d",Section.Sationdis);
+                        sprintf(Buffer+16,"   上行 站号:%02d",Section.Sationdis);
                       //	sprintf(Buffer,"上行 站号:%02d",Section.Sationkey);
-                      sprintf(Buffer,"上行 建国门");    //测试显示
+                     // sprintf(Buffer,"上行");    //测试显示
                     }
                     else
                     {
-                      //  sprintf(Buffer,"下行 站号:%02d",Section.Sationdis);
-                       //sprintf(Buffer,"下行 站号:%02d",Section.Sationkey);
+                        sprintf(Buffer+16,"   下行 站号:%02d",Section.Sationdis);
+                      // sprintf(Buffer,"下行 站号:%02d",Section.Sationkey);
                     }
                     #ifdef NEW0409
                         TextOut(0,75, Buffer);
                     #else
-                        TextOut(0,25,Buffer);
+                        TextOut(100,25,Buffer);
                     #endif
                 }
 
@@ -1002,21 +1032,22 @@ int main(int argc,const char** argv)
                     修改显示票价基价,待从服务器上下载正式票价来显示
                     ***/
                     unsigned char temp[20];           
-                   // AnalysisSheetcheck();                
+                 // AnalysisSheetcheck();                
              
                  //   printf("价格 = %d 固定价格:=%d \n",HostValue.i,Fixvalue.i);
         			memset(temp,0,sizeof(temp));
                     strcpy(temp,"票价:");
-                    value.i = 0;
-                    memcpy(value.intbuf,flc0005.gbasicpice,2);
-        			MoneyValue(temp+5,value.i);
+                   // value.i = 0;
+                  //  memcpy(value.intbuf,flc0005.gbasicpice,2);
+        			MoneyValue(temp+5,filemp.defaultbaseprice.i);
         			TextOut(0,70,temp);
                  #endif
-
+				
+				GetSectionKMFromPara(0,Section.Sationdis);
                 #ifdef NEW0409
                   TextOut(0,210, "请刷卡"); 
                 #else
-                  TextOut(115,110, "请刷卡");
+                  TextOut(0,110, GetOnOffInfo.On_Name);
                 #endif                
 
                 SetTextSize(16);               

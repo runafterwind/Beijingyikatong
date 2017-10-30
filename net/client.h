@@ -30,7 +30,7 @@
 #include <assert.h>
 
 #include "savesql.h"
-
+#include "queue.h"
 
 #define TEST 1
 
@@ -412,5 +412,43 @@ typedef struct send_file_back_{
 }send_file_back;
 	
 
+
+
+void * main_client_thread(void * args);
+
+/*心跳部分*/
+int create_send_heart_mission(heart_info *heartinfo,mission_info * out);
+
+/*上传记录部分*/
+int create_send_A2_mission(record_info * recinfo,mission_info * out);
+
+/*固件描述信息部分*/
+int create_request_update_firm_info_mission(mission_info * out);
+
+/*下载固件部分*/
+int create_download_firm_mission(download_process_info * processinfo,mission_info * out);
+
+/******************************下载商户ID部***************************************/
+int create_request_mchntid_mission(mission_info * out);
+
+/*请求描述信息部分*/
+int create_request_file_desinfo(int fileindex,mission_info * out);
+
+/*下载文件部分*/
+int create_dwonload_file_mission(mission_info * out);
+
+/*设置网路设备可用状态*/
+int update_net_device_satus(int status);
+
+/*设置服务器连接状态*/
+int update_connect_server_status(int status);
+
+/*设置服务器IP 端口*/
+int set_server_ip(char * svip, int iplen, int svport);
+
+
+int is_net_connect(void);
+
+int is_server_connect(void);
 #endif
 
