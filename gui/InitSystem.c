@@ -2603,7 +2603,6 @@ void CardLanFile (unsigned char RW_Type)
 	FILE *ParaFile;
 	int result;
 	unsigned char buffer[512];
-	unsigned char i;
 	unsigned int mkLengthUp, mkLengthDown;
 
 	unsigned char i,j;
@@ -2854,7 +2853,7 @@ void WriteSationDis_Para(unsigned char type,unsigned char *dat,unsigned int len)
     
  }
 
-void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len)
+void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,int offset)
 {
     int result;
     int i,j,ci,maxci,max;

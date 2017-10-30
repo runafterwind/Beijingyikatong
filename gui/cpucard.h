@@ -291,7 +291,7 @@ typedef struct {
 	unsigned char m5ver[2];             //文件版本
 }FileM5;
 
-extern FileM4 filem5;
+extern FileM5 filem5;
 
 //下载的MP费率卡二次发行信息文件
 typedef struct{

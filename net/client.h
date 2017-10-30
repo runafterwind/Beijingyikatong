@@ -415,6 +415,7 @@ typedef struct send_file_back_{
 
 
 void * main_client_thread(void * args);
+void * pppd_connect_thread(void * argv);		//拨号线程
 
 /*心跳部分*/
 int create_send_heart_mission(heart_info *heartinfo,mission_info * out);
