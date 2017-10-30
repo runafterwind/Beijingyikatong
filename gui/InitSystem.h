@@ -1,7 +1,7 @@
 #ifndef INITSYSTEM_H
 #define INITSYSTEM_H
 
-#include  <apparel.h>
+#include  "../include/apparel.h"
 
 /******** printf *******/
 #define DEBUG			0
@@ -441,7 +441,8 @@ extern char RMAllRecord(unsigned int recordnum);
 extern int SqlCheckNewDat (unsigned int Dtype);
 extern char UPdateRecord(unsigned int Drdevnum,int SValue);
 extern unsigned char SaveDirverData(void);
-extern void Display_signal(unsigned char type);
+//extern void Display_signal(unsigned char type);
+extern void Display_signal(viod);
 extern int write_datas_gprs(int fd, unsigned char *buffer, int buf_len);
 extern void InitUart(int *fd,char *uart,int speed);
 extern int Uart_Printf(int fd,char *uartdata);

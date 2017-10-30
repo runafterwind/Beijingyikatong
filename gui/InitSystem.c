@@ -3136,6 +3136,74 @@ void Read_Parameter (void)
 	//    FileCardLan = 1;
 }
 
+int read_ttyS0_data(int fd, char *rcv_buf, int *len)
+{
+	int retval;
+	fd_set rfds;
+	struct timeval tv;
+	int ret=0,pos=0;
+	tv.tv_sec = 1;//set the rcv wait time 0
+	tv.tv_usec = 0;//200000us = 0.3s 100000
+	pos = 0;
+	if ((fd < 0) ||( NULL == rcv_buf))
+    {
+        printf("Read Buffer is Nc\n");
+        return -1;
+    }
+	
+	while(1)
+	{
+		FD_ZERO(&rfds);
+		FD_SET(fd,&rfds);
+		retval = select(fd+1,&rfds,NULL,NULL,&tv);
+		if(retval ==-1)
+		{
+			perror("select()");
+			return -1;
+		}
+		else if(retval)
+		{
+			ret= read(fd, rcv_buf+pos, 64);
+			if(ret>0)
+			{
+				pos += ret;
+				*len = pos;
+				if (pos >= 7)   //20
+					return 0;
+			}
+			else
+				return -1;
+		}
+		else      //timeout
+		{
+				return 1;
+		}
+	}
+	return 0;
+}
+
+
+int M26_init(char *dev) 
+{ 
+	M26_fd = open(dev,O_RDWR); 
+	if(M26_fd < 0)
+	{
+		//printf("打开通信模块失败\n");
+		return -1;
+	} 
+	
+    if(M26_fd > 0)
+    {
+        set_speed (M26_fd, 115200);
+        if (set_Parity (M26_fd, 8,1,'n') < 0)
+        {
+            close(M26_fd);
+            //printf ("uart set_parity error\n");
+        }
+        return M26_fd;
+    }
+
+}
 
 int CheckWirelessModule()
 {
@@ -3510,8 +3578,8 @@ unsigned char InitSystem(void)
 	
 	FindSavedata();	
 	// added by taeguk calculate CRC16
-	Calc_UpdateCrc();	        
-    InitEnv();
+	//Calc_UpdateCrc();	        
+   	// InitEnv();
 
 
 

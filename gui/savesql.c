@@ -30,7 +30,8 @@ extern int sockfd;	//
 extern unsigned char SnBack[4];
 extern volatile unsigned char DLink;  // 自动上传记录失败数
 extern unsigned char AutoUpFlag;
-extern unsigned char ConnectFlag; //上网标志
+
+//extern unsigned char ConnectFlag; //上网标志
 extern unsigned char SavedataErr;
 extern LongUnon DevSID;
 extern LongUnon CodeNum;
@@ -3051,6 +3052,8 @@ return (Stu);
 - 输出参数 : 无
 *************************************************************************************************************
 */
+
+#if 0 //重写
 void * Readsql_Pthread (void * args)
 {
     int status = 0xff;
@@ -3112,4 +3115,4 @@ void * Readsql_Pthread (void * args)
     }
     
 }
-
+#endif
