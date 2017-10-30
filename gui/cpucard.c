@@ -77,7 +77,13 @@ FLC0006 flc0006;
 FLC0007 flc0007;
 FLC0008 flc0008;
 FLC0009 flc0009;
-//CardRate_local localcard[13];
+
+FileM4 filem4;
+FileM5 filem5;
+FileMP filemp;
+
+CardRate_local localcard[13];
+
 CardRate_remot remotcard[13];
 
 
@@ -97,10 +103,12 @@ extern unsigned char AutoUpFlag;
 extern JackRegal Sector;
 extern CardLanSector LanSec;		//用户扇区
 extern SectionFarPar Section,Sectionup;
-extern unsigned char SRCPUCardBuf[1024];
+
+unsigned char SRCPUCardBuf[1024];
 static LongUnon OldCash,OldCi;
 static int  receive_len[1] = {0};
-static char receive_buf[128]= {0};
+static char receive_buf[1024]= {0};
+
 extern ShortUnon Infor;
 extern Interval  retdata;	//时间间隔
 extern pthread_mutex_t m_Blacklist;
@@ -5784,7 +5792,9 @@ unsigned char ReadCardInfor_CPU(void)
     			{
                     if((receive_len[0] > 2)&&(receive_buf[receive_len[0]-2]==0x90)&&(receive_buf[receive_len[0]-1]==0x00))
     				{
-                        memcpy(buff+i*4*48,receive_buf,receive_buf[0]-2);
+
+                        memcpy(buff+i*4*48,receive_buf,receive_len[0]-2);
+
                         DBG_PRINTF("0008每次读取到的记录数据:");
                         menu_print(buff, receive_buf[0]-2);
                         }
@@ -5908,7 +5918,9 @@ unsigned char ReadCardInfor_CPU(void)
                     menu_print(buff3, receive_buf[0]);       
                     tmp.i = 0;
                     memcpy(tmp.intbuf,receive_buf+1,2);
-                    WriteSection_Para(0, buff3+3,tmp.i);
+
+                    WriteSection_Para(0, buff3+3,tmp.i,0);
+
                     t++;
                     }
              }
@@ -5938,7 +5950,11 @@ unsigned char ReadCardInfor_CPU(void)
                     menu_print(buff3, receive_buf[0]);       
                     tmp.i = 0;
                     memcpy(tmp.intbuf,receive_buf+1,2);
-                    WriteSection_Para(1, buff3+3,tmp.i);
+
+					tmp1.i = 0;
+					memcpy(tmp1.intbuf,filem4.downrecordnum,2);
+                    WriteSection_Para(1, buff3+3,tmp.i,tmp1.i);
+
                     t++;
                     }
              }
@@ -5955,6 +5971,9 @@ unsigned char ReadCardInfor_CPU(void)
 			flag = 0;
 			break;
 		}
+
+		printf("ReadCardInfor_CPU	 End == %d \n",t);
+
 	}
 
 #if APP_PRINTF

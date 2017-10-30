@@ -156,6 +156,10 @@ unsigned char g_FgCardLanQRCode = 0;
 
 extern LongUnon WatcherCard;
 extern LongUnon SeDriverCard;
+unsigned char g_DevNoInBus = 0; //变量用于定于车上终端机编号，一般车上有3个车载机
+
+
+
 
 int CheckLineCardlanBin(unsigned char num1,unsigned char num2);
 int UpdateLinePara(unsigned char num1,unsigned char num2);	//更新消费参数，与线路同步
@@ -4895,6 +4899,92 @@ void SectionStaion_Uart(unsigned char *databuf)
         }
     }
 }
+
+/*北京项目按键于其他*/
+
+/*
+CRC8 = 0xb8 10111000 (0x1b8 110111000)
+方程为x^8+x^7+x^5+x^4+x^3
+*/
+
+unsigned char CalCRC(unsigned char *ptr, unsigned char len)
+{
+    unsigned char i; 
+    unsigned char crc=0x00； /* 计算的初始crc值 */ 
+
+    while(len--)
+    {
+        crc ^= *ptr++;  /* 每次先与需要计算的数据异或,计算完指向下一数据 */  
+        for (i=8; i>0; --i)   /* 下面这段计算过程与计算一个字节crc一样 */  
+        { 
+            if (crc & 0x80)
+                crc = (crc << 1) ^ 0xb8;
+            else
+                crc = (crc << 1);
+        }
+    }
+
+    return (crc); 
+}
+
+int RetCtrlCmdStatus(char *cmd)
+{
+	unsigned char sendbuf[40];
+	memset(sendbuf, 0, sizeof(sendbuf));
+	
+	if (!memcmp(cmd, CMD_FUNC_REQ, 2))
+}
+	
+
+void CheckUARTPacket_beijing(char ch)
+{
+	unsigned char len = 0;
+	unsigned char cmdstr[3];
+	if (((ch & 0xf0) == g_DevNoInBus) && (UARTPacketIndex == 0))
+	{
+   	    UARTPacket[UARTPacketIndex] = ch;
+	    UARTPacketIndex++;
+   }
+   else if (UARTPacketIndex > 1)
+   {
+	    UARTPacket[UARTPacketIndex] = ch;
+	    UARTPacketIndex++;
+   }
+   else
+   	{
+   		UARTPacketIndex = 0;
+		return;
+   	}
+   
+	if (UARTPacketIndex < 3) return;
+		
+	len = UARTPacket[1];
+   if (UARTPacketIndex != (len+3))// rcv finish
+   		return;
+
+	if (UARTPacket[2] != CMD_FLAG_CH)
+	{
+		UARTPacketIndex = 0;
+		return;
+	}
+   
+
+   	if (CalCRC(UARTPacket, UARTPacketIndex-1) != UARTPacket[UARTPacketIndex-1])
+   	{
+		UARTPacketIndex = 0;
+		return;
+    }
+   memset(cmdstr, 0, sizeof(cmdstr));
+   memcpy(cmdstr, UARTPacket+3, 2)
+   if (!memcmp(cmdstr, CMD_FUNC_REQ, 2))
+   {
+
+   }
+
+}
+
+
+
 /*******************************************************/
 #ifdef ZHEJIANG_ANJI
 void CalcXorAndSum(unsigned char *in_arr, unsigned short in_len, unsigned char *xor, unsigned char *sum)

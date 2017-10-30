@@ -272,17 +272,76 @@ typedef struct{
 extern FLC0009 flc0009;
 
 
+typedef struct {
+	unsigned char uprecord;				//上行记录长度
+	unsigned char uprecordnun[2];		//上行记录个数
+	unsigned char downrecord;			//下行记录长度
+	unsigned char downrecordnum[2];     //下行记录个数
+	unsigned char m4ver[2];             //文件版本
+}FileM4;
+
+extern FileM4 filem4;
+
+
+typedef struct {
+	unsigned char localrate;			//本地折率单个记录长度
+	unsigned char localratenum[2];		//本地折率记录个数
+	unsigned char remotrate;			//互通折率单个记录长度
+	unsigned char remotratenum[2];     //互通记录个数
+	unsigned char m5ver[2];             //文件版本
+}FileM5;
+
+extern FileM4 filem5;
+
+//下载的MP费率卡二次发行信息文件
+typedef struct{
+	unsigned char linenum[2];			// 线路号	
+	unsigned char linename[16];			//线路名称
+	unsigned char corpflag[2];			//运营单位标示
+	unsigned char corpenterprisename[40];  //客运企业名称
+	unsigned char corpcode[4];			//所属分公司代码		
+	unsigned char corpcompanyname[40];	//分公司名称
+	unsigned char lineattr;				//线路属性
+	ShortUnon uppricesitemnum;			//上行站点总数
+	ShortUnon downpricesitemnum;		//下行站点总数
+	unsigned char pricever[2];			//当前线路文件格式版本号
+	ShortUnon tickettransfer;			//换乘时间
+	ShortUnon defaultbaseprice;			//基本票价
+	unsigned char upstationmid;			//上行市界起点
+	unsigned char downstationmid;		//下行市界起点
+	unsigned char modebj;				//本地未定义卡类型处理模式
+	unsigned char modehl;				//异地未定义卡类型处理模式
+	unsigned char vehicleattr;			//车辆属性
+	unsigned char modehlbp;			//异地逃跑补票模式
+	unsigned char onoffdir;				//上下车方向不同补票规则
+	unsigned char pricediscount;		//补票金额是否打折标识
+	unsigned char funcflag[2];			//功能开关
+	unsigned char filever[2];			//本文件版本
+	
+}FileMP;
+
+extern FileMP filemp;
 
 
 
-
-
-
-
-
-
-
-
+/*
+m5 文件
+*/
+typedef struct {
+    unsigned char phycardtype;          //卡片物理类型
+    unsigned char logiccardtype;        //卡片逻辑卡类型        13种卡
+    unsigned char cardattr;             //卡片属性   0x01:普通储值卡    0x02:计次卡     0x03:定期卡   0x04:特殊储值卡
+    unsigned char consumemode;          //收费模式   高4位使用模式  低4位表示提示模式
+    ShortUnon 		minblancelimit;    //最小余额限制  卡内余额小于此金额不允许交易  单位分 2HEX
+    ShortUnon 		overdraw;          //最大透支限额  单位分  2HEX
+    LongUnon 		maxblancelimit;    //最大余额限制  卡内余额大于此金额不允许交易  单位分   4hex
+    ShortUnon 		maxdebit;          //最大扣款额度  2hex
+    unsigned char   indiscontrate;        //界内优惠率
+    ShortUnon 		indiscontlimit;    //界内优惠额度 2hex
+    unsigned char   outdiscontrate;       //界外优惠率
+    ShortUnon	        outdiscontlimit;   //界外优惠额度 2hex       //预留
+}FileM5_T;
+extern FileM5_T CardConParam[CARD_NUMBER];
 
 
 

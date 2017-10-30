@@ -150,7 +150,8 @@
 #define		OFF_LINE_CONSUM_FILE	     "/mnt/record/cardsave.bin"
 #define		SYS_PARAM_FILE               "/mnt/record/system.sys"
 #define     RECORD_FILE_PATH 	         "/mnt/record/RecordErrorFile.txt"
-#define     PARM_FILE_PATH               "/mnt/record/cardlan.sys"
+//#define     PARM_FILE_PATH               "/mnt/record/cardlan.sys"
+#define     PARM_FILE_PATH               "/mnt/record/M4"
 #define     SECTION_FILE_PATH            "/mnt/record/section.sys"
 #define     SECTIONUP_FILE_PATH          "/mnt/record/sectionup.sys"
 #define     SECTIONDISUP_FILE_PATH       "/mnt/record/stationdisup.sys"
@@ -158,6 +159,9 @@
 #define     BASICRATE_FILE_PATH          "/mnt/record/basicrate.sys"
 #define		SAVE_CONSUM_DATA_DIRECT
 
+#define   SECTION_KM_PATH_NAME	 "/mnt/record/M3"
+//每2个站点之间的公里数所占的文件大小
+#define   SECTION_POINT_SIZE		22
 
 
 

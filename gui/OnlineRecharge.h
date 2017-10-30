@@ -28,6 +28,51 @@ struct DALI_TransferMsg {
 
 #define SAVE_STATION_NUM_FILE		"stationNum.txt"
 
+#define 	EXT_KEY_ADDR		0
+#define		BUS_DEV1_ADDR		1
+#define		BUS_DEV2_ADDR		2
+#define		BUS_DEV3_ADDR		3
+#define		BUS_GPS_ADDR		0x0F
+
+#define		DEV_TYPE_KEY		0
+#define		DEV_TYPE_POS		1
+#define		DEV_TYPE_GPS		0X0F
+
+
+
+
+#define		CMD_FLAG_CH			'@'
+
+
+/*设备询问*/
+#define		CMD_FUNC_REQ		"00"
+
+
+/*查询/设置当前站台号于方向*/
+#define		CMD_FUNC_DIR_NO		"01"
+
+/*查询/设置机器日期*/
+#define		CMD_FUNC_DATE		"02"
+
+/*查询/设置机器时间*/
+#define		CMD_FUNC_TIME		"03"
+
+/*查询/设置机器时间与日期*/
+#define		CMD_FUNC_TIME_DATE		"08"
+
+/*查询/设置机器线路号*/
+#define		CMD_FUNC_ROAD_NO		"10"
+
+/*设置终端机音量增大*/
+#define		CMD_FUNC_VOL_UP		"18"
+
+/*设置终端机音量减小*/
+#define		CMD_FUNC_VOL_DOWN		"19"
+
+/*检查终端机各项参数*/
+#define		CMD_FUNC_CHECK_PARAM		"68"
+
+
 extern unsigned char SectionSta(unsigned char srct,unsigned char type);
 extern void SectionApp(void);
 extern void ReportCardType();
