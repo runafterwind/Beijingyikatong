@@ -13,7 +13,8 @@ SRCDIRS		= ./ \
  	          ./sound \
 		 ./Errorlog \
 		 ./psam \
-		./update
+		./update \
+		./net
 
 ASFLAGS		=
 CFLAGS		= -Wall -w

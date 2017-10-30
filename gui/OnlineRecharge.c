@@ -63,7 +63,7 @@ extern CardLanSector LanSec;		//用户扇区
 extern Operat USBFile;
 extern Operat MMCFile;
 extern SectionFarPar Section,Sectionup;
-extern unsigned char ConnectFlag; //上网标志
+//extern unsigned char ConnectFlag; //上网标志
 extern unsigned short SectionNum; //
 extern unsigned int CurIcCardNo;
 
@@ -4335,8 +4335,8 @@ void SectionApp(void)
 
                 SetTextSize(32);
                 SetTextColor(Color_white);
-				DebugPrintf("ConnectFlag = 0x%02X\n", ConnectFlag);
-                Display_signal(ConnectFlag);
+		//DebugPrintf("ConnectFlag = 0x%02X\n", ConnectFlag);
+                Display_signal();
                 if(Section.Updown  == 0x00)
                 {
                     sprintf(Buffer,"上行 站号:%02d",Section.Sationdis);

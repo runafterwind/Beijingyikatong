@@ -1,3 +1,4 @@
+#if 0
 #include "apparel.h"
 #include "Resumedownload.h"
 #if (L9==0)
@@ -39,7 +40,7 @@ Sfileunion Update3;
 
 /****引用其他文件的变量****/
 extern  BMP_INFO bmppicture1;
-extern unsigned char ConnectFlag;			
+//extern unsigned char ConnectFlag;			
 extern int sockfd;
 extern pthread_mutex_t m_socketwrite; 
 #if (L9==0)
@@ -542,7 +543,8 @@ static char GprsCmd_Upfile(unsigned char *SndDa)
 #endif
     if(status != 0)
     {
-        ConnectFlag  = 1;
+        //ConnectFlag  = 1;
+        
     }
 
 #if GPRSPR
@@ -999,6 +1001,6 @@ void close_pthread()
             }        
         }
 }
-   
+#endif   
          
 

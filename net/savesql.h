@@ -1,7 +1,7 @@
 #ifndef SAVESQL_H
 #define SAVESQL_H
 
-
+#if 0
 //公用体
 typedef union
 {
@@ -14,7 +14,7 @@ typedef union
 	unsigned char longbuf[4];
 	unsigned int  i;
 } LongUnon;
-
+#endif
 
 //记录文件格式
 //本记录格式支持A2、A5、A6(实体卡与二维码电子卡)刷卡数据

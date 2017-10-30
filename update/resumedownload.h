@@ -1,6 +1,7 @@
 #ifndef _Resumedownload_H
 #define _Resumedownload_H
 
+#if 0
 #include "apparel.h"
 /*******打印调试开关*******/
 #define UPDEG       0                   
@@ -186,7 +187,7 @@ extern void *DownloadFile_pthread(void *args);
 ******************************************/
 extern void close_pthread();
 
-
+#endif
 
 #endif
 

@@ -45,7 +45,7 @@ extern SectionFarPar Section,Sectionup;
 extern unsigned char BankCardSwitch;
 
 
-unsigned char ConnectFlag; 			//联上服务器，此标志为  1
+//unsigned char ConnectFlag; 			//联上服务器，此标志为  1
 unsigned char DLink;   			//自动上传记录失败数
 unsigned short Heart;
 unsigned char heartlen;
@@ -102,7 +102,7 @@ static unsigned char FgM26Module = 0;
 
 
 
-#if 1
+#if 0
 /*
 *************************************************************************************************************
 - 函数名称 : unsigned char Judge_Rcv(unsigned char *Packet,unsigned char Data_len)

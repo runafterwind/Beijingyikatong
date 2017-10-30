@@ -12,6 +12,8 @@
 #include "../gui/gps.h"
 #include "../update/resumedownload.h"
 #include "../gui/cpucard.h"
+#include "../net/client.h"
+
 /************************************************************/
 MYBMPFILE *signal_bmp;
 
@@ -22,7 +24,7 @@ extern unsigned char PsamNum[6];
 extern unsigned char PsamNum_bak2[6];
 extern unsigned char Tunion;
 extern unsigned char OPENBEEP;
-extern unsigned char ConnectFlag; //上网标志
+
 extern LongUnon AllMoney;
 extern LongUnon TypeMoney;
 extern LongUnon DevNum;
@@ -121,7 +123,9 @@ struct DRIVER_SEARCH SearchNextPage;
 //线程自锁
 pthread_mutex_t m_sysfile = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t m_datafile = PTHREAD_MUTEX_INITIALIZER; //m_socketwrite
+
 pthread_mutex_t m_socketwrite = PTHREAD_MUTEX_INITIALIZER; //
+
 pthread_mutex_t m_ErrorRecFile = PTHREAD_MUTEX_INITIALIZER; //
 pthread_mutex_t m_ErrorList = PTHREAD_MUTEX_INITIALIZER; //
 pthread_mutex_t m_DisplaySingle = PTHREAD_MUTEX_INITIALIZER; //
@@ -308,6 +312,7 @@ char* mk_time (char* buff)
 
 
 
+#if 0
 void Display_signal(unsigned char type)
 {	
 	//DebugPrintf("type = %u\n", type);
@@ -488,7 +493,37 @@ void Display_signal(unsigned char type)
         
 	pthread_mutex_unlock(&m_DisplaySingle);
 }
+#else
+void Display_signal()
+{
+	int netdevicestatus,serverstatus;
+	netdevicestatus=is_net_connect();
+	serverstatus=is_server_connect();
 
+	
+	int len1=strlen("正在拨号中");
+	int len2 = strlen("正在连接服务器");	
+	int MAXLen=len1>len2?len1:len2;	
+
+	if(netdevicestatus==1)
+		{
+			;
+		}
+	else{
+			TextOut_fontSize(MAXLEN-len1*8,10,"正在拨号中", 16);
+			return ;
+	}
+
+	if(serverstatus==1)
+		{
+			Show_BMP(100,10,"sigbmp.bmp");
+		}
+	else{
+			TextOut_fontSize(MAXLEN-len2*8, 10, "正在连接服务器", 16);
+		}
+	
+}
+#endif
 
 
 void * main_timer (void * args)
@@ -862,7 +897,7 @@ int main(int argc,const char** argv)
 	}	
 
 
-	ConnectFlag = 1;
+	
 	freedomflag = 1;
     GPSSIG = 1;    
 	stationup = Section.Updown;
@@ -895,12 +930,12 @@ int main(int argc,const char** argv)
 	param.sched_priority = sched_get_priority_max(SCHED_OTHER);
 	pthread_attr_setschedparam(&attr, &param);
 
-    pthread_create ( &pg, &attr, Gps_Pthread,"AVBC");
-    pthread_create ( &ph, &attr, sendGps_Pthread,"AVBC");
+    	//pthread_create ( &pg, &attr, Gps_Pthread,"AVBC");
+   	 //pthread_create ( &ph, &attr, sendGps_Pthread,"AVBC");
 
 	pthread_create ( &pf, &attr, TimerTask, "AVBC");  
-	pthread_create ( &pb, &attr, ReadGprs_Pthread, "AVBC");		//GPRS读取数据
-	pthread_create ( &pd, &attr, Readsql_Pthread, "AVBC");		//自动上传数据
+	//pthread_create ( &pb, &attr, ReadGprs_Pthread, "AVBC");		//GPRS读取数据
+	//pthread_create ( &pd, &attr, Readsql_Pthread, "AVBC");		//自动上传数据
 #ifdef SUPPORT_QR_CODE
 #if QR_CODE_USE_USBHID
 	pthread_create(&pcc, &attr, UsbHid_Pthread, "AVBC");
@@ -959,8 +994,10 @@ int main(int argc,const char** argv)
                #endif
 
 
-                Display_signal(ConnectFlag);
+
+                Display_signal();
                 
+
                 {
                     memset(Buffer,0,sizeof(Buffer));
 					/*显示线路名和站点*/

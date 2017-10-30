@@ -1,5 +1,6 @@
 #include "client.h"
 #include "queue.h"
+#include "../gui/InitSystem.h"
 
 #define IP "211.145.51.150"
 #define PORT 40009
@@ -11,9 +12,9 @@
 #define CLIENT_DEBUG 1
 
 #ifdef CLIENT_DEBUG
-	#define DebugPrintf  printf
+	#define netDebugPrintf  printf
 #else
-	#define DebugPrintf(format, ...)	
+	#define netDebugPrintf(format, ...)	
 #endif
 
 
@@ -23,8 +24,8 @@ static unsigned short  port=PORT;
 static int  netdevicestatus=0;		//网络设备可用状态: 0 不可用，1 可用
 static int  connetstatus=0;			//连接服务器状态:  0 断开 ，1 连接
 static int  sockfd=-1;		
-pthread_mutex_t m_socketwrite = PTHREAD_MUTEX_INITIALIZER; //
-
+//pthread_mutex_t m_socketwrite = PTHREAD_MUTEX_INITIALIZER; //
+extern pthread_mutex_t m_socketwrite ;
 
 static heart_info * heatinfo=NULL;
 static device_info * devinfo=NULL;
@@ -42,7 +43,7 @@ enum NET_ERROCODE{
 	CONNET_ERR  = -3,
 	F_SETFL_ERR = -2,
 	F_GETFL_ERR = -1,
-	SUCCESS		= 0
+	SUCCESS_OK	   = 0,
 };
 
 
@@ -211,13 +212,13 @@ int write_datas_tty(int fd, unsigned char *buffer, int buf_len)
 			if (FD_ISSET(fd, &w_set))
             {
 				
-                DebugPrintf("W socket=%03d::%s \n",bytes_to_write_total,ptemp);
+                netDebugPrintf("W socket=%03d::%s \n",bytes_to_write_total,ptemp);
 				for(i=0;i<bytes_to_write_total;i++)
-					DebugPrintf("%02x ",ptemp[i]);
-				DebugPrintf("\n");
+					netDebugPrintf("%02x ",ptemp[i]);
+				netDebugPrintf("\n");
 		
 				bytes_write = send(fd, ptemp, bytes_to_write_total, 0);
-				DebugPrintf("bytes_write = 0x%02X\n",bytes_write);
+				netDebugPrintf("bytes_write = 0x%02X\n",bytes_write);
 
 				  if (bytes_write < 0)
                   {
@@ -242,7 +243,7 @@ int write_datas_tty(int fd, unsigned char *buffer, int buf_len)
 		
 	 }
 	
-	 return SUCCESS;
+	 return SUCCESS_OK;
 }
 
 
@@ -329,7 +330,7 @@ int create_sorket(const char * ip,unsigned short port,int * fd)
         fcntl(sockfd, F_SETFL,setflag);
         FD_CLR(sockfd,&fdset);
         *fd=sockfd;
-        return SUCCESS;
+        return SUCCESS_OK;
 
 	}
 	else{
@@ -373,6 +374,16 @@ int update_net_device_satus(int status)
 
 	netdevicestatus=status;
 	return 0;
+}
+
+int is_net_connect()
+{
+	return netdevicestatus;
+}
+
+int is_server_connect()
+{
+	return connetstatus;
 }
 
 
@@ -758,7 +769,7 @@ int send_mesg(mission_list * mission)
 
 	printf("send_mesage :: ready to send === \n");	
 	err=write_datas_gprs(sockfd,mission->missinfo.data,mission->missinfo.datalen);
-	if(err!=SUCCESS)
+	if(err!=SUCCESS_OK)
 	{
 		display_neterr( err);
 		return -1;
@@ -935,11 +946,11 @@ int heart_back_process(mission_list * mission,char * framdata,int framesz)
 	
 	memcpy(&heartbakinfo,msg.data,sizeof(heartbakinfo));
 
-	DebugPrintf(" DATAtime: %02x%02x%02x%02x%02x%02x%02x \n",heartbakinfo.dattime[0],\
+	netDebugPrintf(" DATAtime: %02x%02x%02x%02x%02x%02x%02x \n",heartbakinfo.dattime[0],\
 		heartbakinfo.dattime[1],heartbakinfo.dattime[2],heartbakinfo.dattime[3],\
 		heartbakinfo.dattime[4],heartbakinfo.dattime[5],heartbakinfo.dattime[6]);
-	DebugPrintf(" FLAG: %02x%02x \n",heartbakinfo.flag[0],heartbakinfo.flag[1]);
-	DebugPrintf(" BUSCODE: %02x%02x%02x%02x \n",heartbakinfo.buscode[0],heartbakinfo.buscode[1],heartbakinfo.buscode[2],heartbakinfo.buscode[3]);
+	netDebugPrintf(" FLAG: %02x%02x \n",heartbakinfo.flag[0],heartbakinfo.flag[1]);
+	netDebugPrintf(" BUSCODE: %02x%02x%02x%02x \n",heartbakinfo.buscode[0],heartbakinfo.buscode[1],heartbakinfo.buscode[2],heartbakinfo.buscode[3]);
 
 	int i;
 #if 0
@@ -952,10 +963,10 @@ int heart_back_process(mission_list * mission,char * framdata,int framesz)
 				}
 	}
 #else
-		//analyse_bitmap(13);		//Mp	
+		analyse_bitmap(13);		//Mp	
 		//analyse_bitmap(12);		//M5
 		//analyse_bitmap(11);		//M4
-		analyse_bitmap(3);		//M3
+		//analyse_bitmap(3);		//M3
 		//analyse_bitmap(2);		//固件，没通过
 
 		//analyse_bitmap(6);		//G1文件
@@ -1086,7 +1097,7 @@ int A2_back_process(mission_list * mission,char * framdata,int framesz,record_ba
 	record_bak_info backinfo;
 	
 
-	DebugPrintf("-----  in func %s  ----- \n",__func__);
+	netDebugPrintf("-----  in func %s  ----- \n",__func__);
 	if(framdata==NULL || mission==NULL || respond==NULL)
 		{
 			printf("in func %s paramiter is NULL \n",__func__);
@@ -1143,11 +1154,11 @@ int A2_back_process(mission_list * mission,char * framdata,int framesz,record_ba
 		}
 	memcpy(&backinfo,msg.data,sizeof(backinfo));
 
-	DebugPrintf("A2 back: respond=%02x%02x%02x \n",backinfo.respond[0],backinfo.respond[1],backinfo.respond[2]);
+	netDebugPrintf("A2 back: respond=%02x%02x%02x \n",backinfo.respond[0],backinfo.respond[1],backinfo.respond[2]);
 
 	memcpy(respond->respond,backinfo.respond,sizeof(backinfo.respond));
 
-	DebugPrintf("respond code = %02x %02x  %02x\n",backinfo.respond[0],backinfo.respond[1],backinfo.respond[2]);
+	netDebugPrintf("respond code = %02x %02x  %02x\n",backinfo.respond[0],backinfo.respond[1],backinfo.respond[2]);
 	
 	return 0;
 	
@@ -1305,11 +1316,11 @@ int update_firm_info_back_process(mission_list * mission,char * framdata,int fra
 	memcpy(&backinfo,msg.data,sizeof(backinfo));	
 	memcpy(out,&backinfo,sizeof(backinfo));
 	
-	DebugPrintf("fix version=%02x%02x\n",backinfo.version[0],backinfo.version[1]);
-	DebugPrintf("fix size =0x%02x%02x%02x%02x\n",backinfo.filesz[0],backinfo.filesz[1],backinfo.filesz[2],backinfo.filesz[3]);
+	netDebugPrintf("fix version=%02x%02x\n",backinfo.version[0],backinfo.version[1]);
+	netDebugPrintf("fix size =0x%02x%02x%02x%02x\n",backinfo.filesz[0],backinfo.filesz[1],backinfo.filesz[2],backinfo.filesz[3]);
 	LongUnon ldata;
 	memcpy(ldata.longbuf,backinfo.filesz,4);
-	DebugPrintf("fix size = %d \n",ldata.i);
+	netDebugPrintf("fix size = %d \n",ldata.i);
 	return 0;
 	
 }
@@ -1323,7 +1334,7 @@ download_process_info * dwnPrcInfo=NULL;
 int init_download_fix(updatefirm_back_info info)
 {
 
-	DebugPrintf("----in func %s ---\n",__func__);
+	netDebugPrintf("----in func %s ---\n",__func__);
 		if(dwnPrcInfo!=NULL)
 			free(dwnPrcInfo);
 
@@ -1426,9 +1437,9 @@ int init_download_fix(updatefirm_back_info info)
 		dwnPrcInfo->currsz=filehead.currsz;
 		dwnPrcInfo->offset=filehead.offset;
 
-		DebugPrintf("dwnfixpro->tmppath=%s ,destpath=%s \n",dwnPrcInfo->tmppath,dwnPrcInfo->destpath);
-		DebugPrintf("dwnfixpro->version:%02x%02x\n",dwnPrcInfo->version[0],dwnPrcInfo->version[1]);
-		DebugPrintf("dwnfixpro->destlen=%d currsize=%d offset=%d",dwnPrcInfo->origisz,dwnPrcInfo->currsz,dwnPrcInfo->offset);
+		netDebugPrintf("dwnfixpro->tmppath=%s ,destpath=%s \n",dwnPrcInfo->tmppath,dwnPrcInfo->destpath);
+		netDebugPrintf("dwnfixpro->version:%02x%02x\n",dwnPrcInfo->version[0],dwnPrcInfo->version[1]);
+		netDebugPrintf("dwnfixpro->destlen=%d currsize=%d offset=%d",dwnPrcInfo->origisz,dwnPrcInfo->currsz,dwnPrcInfo->offset);
 		return 0;
 }
 
@@ -1446,7 +1457,7 @@ int create_download_firm_mission(download_process_info * processinfo,mission_inf
 	/*
 		
 	*/
-	DebugPrintf("---- in func %s ------ \n",__func__);
+	netDebugPrintf("---- in func %s ------ \n",__func__);
 	if(out==NULL)
 		return -1;
 	
@@ -1818,27 +1829,27 @@ int request_Mchn_back_process(mission_list * mission,char * framdata,int framesz
 	/*显示内容*/
 
 #if CLIENT_DEBUG
-	DebugPrintf("---0x3087 back info:\n");
-	DebugPrintf("param Ver:%02x %02x \n",backinfo.paraVer[0],backinfo.paraVer[1]);
-    DebugPrintf("agentId  :%02x %02x %02x %02x \n",backinfo.agentId[0],backinfo.agentId[1],backinfo.agentId[2],backinfo.agentId[3]);
-	DebugPrintf("agentSpId:%02x \n",backinfo.agentSpId);
-	DebugPrintf("Mchntid-1:%02x %02x %02x %02x %02x %02x",backinfo.mchntId1[0],backinfo.mchntId1[1],backinfo.mchntId1[2],\
+	netDebugPrintf("---0x3087 back info:\n");
+	netDebugPrintf("param Ver:%02x %02x \n",backinfo.paraVer[0],backinfo.paraVer[1]);
+    netDebugPrintf("agentId  :%02x %02x %02x %02x \n",backinfo.agentId[0],backinfo.agentId[1],backinfo.agentId[2],backinfo.agentId[3]);
+	netDebugPrintf("agentSpId:%02x \n",backinfo.agentSpId);
+	netDebugPrintf("Mchntid-1:%02x %02x %02x %02x %02x %02x",backinfo.mchntId1[0],backinfo.mchntId1[1],backinfo.mchntId1[2],\
 		backinfo.mchntId1[3],backinfo.mchntId1[4],backinfo.mchntId1[5]);
-	DebugPrintf("MchntSpid-1:%02x %02x",backinfo.mchntSpId1[0],backinfo.mchntSpId1[1]);
-	DebugPrintf("Mchntid-2:%02x %02x %02x %02x %02x %02x",backinfo.mchntId2[0],backinfo.mchntId2[1],backinfo.mchntId2[2],\
+	netDebugPrintf("MchntSpid-1:%02x %02x",backinfo.mchntSpId1[0],backinfo.mchntSpId1[1]);
+	netDebugPrintf("Mchntid-2:%02x %02x %02x %02x %02x %02x",backinfo.mchntId2[0],backinfo.mchntId2[1],backinfo.mchntId2[2],\
 			backinfo.mchntId2[3],backinfo.mchntId2[4],backinfo.mchntId2[5]);
-	DebugPrintf("MchntSpid-2:%02x %02x",backinfo.mchntSpId2[0],backinfo.mchntSpId2[1]);
-	DebugPrintf("mchntname:%s \n",backinfo.mchniName);
-	DebugPrintf("storeId:%02x %02x %02x %02x %02x %02x",backinfo.storeId[0],backinfo.storeId[1],backinfo.storeId[2],\
+	netDebugPrintf("MchntSpid-2:%02x %02x",backinfo.mchntSpId2[0],backinfo.mchntSpId2[1]);
+	netDebugPrintf("mchntname:%s \n",backinfo.mchniName);
+	netDebugPrintf("storeId:%02x %02x %02x %02x %02x %02x",backinfo.storeId[0],backinfo.storeId[1],backinfo.storeId[2],\
 			backinfo.storeId[3],backinfo.storeId[4],backinfo.storeId[5]);
-	DebugPrintf("storepid:%02x %02x \n",backinfo.storeSpId[0],backinfo.storeSpId[1]);
-	DebugPrintf("store name:%s \n",backinfo.storeNmae);
-	DebugPrintf("off season month:%s \n",backinfo.offSeasonMon);
-	DebugPrintf("off season price:%02x%02x%02x%02x \n",backinfo.offSeasonPri[0],backinfo.offSeasonPri[1],backinfo.offSeasonPri[2],backinfo.offSeasonPri[3]);
+	netDebugPrintf("storepid:%02x %02x \n",backinfo.storeSpId[0],backinfo.storeSpId[1]);
+	netDebugPrintf("store name:%s \n",backinfo.storeNmae);
+	netDebugPrintf("off season month:%s \n",backinfo.offSeasonMon);
+	netDebugPrintf("off season price:%02x%02x%02x%02x \n",backinfo.offSeasonPri[0],backinfo.offSeasonPri[1],backinfo.offSeasonPri[2],backinfo.offSeasonPri[3]);
 
 	
-	DebugPrintf("on season month:%s \n",backinfo.onSeasonMon);
-	DebugPrintf("on season price:%02x%02x%02x%02x \n",backinfo.onSeasonPri[0],backinfo.onSeasonPri[1],backinfo.onSeasonPri[2],backinfo.onSeasonPri[3]);
+	netDebugPrintf("on season month:%s \n",backinfo.onSeasonMon);
+	netDebugPrintf("on season price:%02x%02x%02x%02x \n",backinfo.onSeasonPri[0],backinfo.onSeasonPri[1],backinfo.onSeasonPri[2],backinfo.onSeasonPri[3]);
 #endif
 	
 	return 0;
@@ -1879,10 +1890,10 @@ int init_dwonfie_process(file_desinfo_back * backinfo)
 	int i;
 	unsigned char cmd[128];
 	
-	DebugPrintf("--- in func %s -----\n",__func__);
+	netDebugPrintf("--- in func %s -----\n",__func__);
 	for(i=0;i<FILE_SUPPORT_MAX;i++)
 		{
-			DebugPrintf("bcakinfo->filename=%s  , dwnfilpro[%d].keywor=%s \n",backinfo->filename,\
+			netDebugPrintf("bcakinfo->filename=%s  , dwnfilpro[%d].keywor=%s \n",backinfo->filename,\
 				i,dwnFilPro[i].keyword);
 		
 			if(strncmp(backinfo->filename,dwnFilPro[i].keyword,strlen(backinfo->filename))==0)
@@ -1922,11 +1933,11 @@ int init_dwonfie_process(file_desinfo_back * backinfo)
 					memcpy(dwnFilPro[i].filecrc,backinfo->fileCRC,2);
 					dwnFilPro[i].offset=0;			
 					dwnFilPro[i].status=1;
-					DebugPrintf("dwnfilpro.keywor=%s\n",dwnFilPro[i].keyword);
-					DebugPrintf("dwnfilpro.tmpname=%s \n",dwnFilPro[i].tmpname);
-					DebugPrintf("dwnfilpro.destlen=%d \n",dwnFilPro[i].destlen);
-					DebugPrintf("dwnfilpro.offset=%d \n",dwnFilPro[i].offset);
-					DebugPrintf("dwnfilpro.fileCRC=%02x%02x\n",dwnFilPro[i].filecrc[0],dwnFilPro[i].filecrc[1]);
+					netDebugPrintf("dwnfilpro.keywor=%s\n",dwnFilPro[i].keyword);
+					netDebugPrintf("dwnfilpro.tmpname=%s \n",dwnFilPro[i].tmpname);
+					netDebugPrintf("dwnfilpro.destlen=%d \n",dwnFilPro[i].destlen);
+					netDebugPrintf("dwnfilpro.offset=%d \n",dwnFilPro[i].offset);
+					netDebugPrintf("dwnfilpro.fileCRC=%02x%02x\n",dwnFilPro[i].filecrc[0],dwnFilPro[i].filecrc[1]);
 					
 				}
 			else
@@ -1950,7 +1961,7 @@ int create_request_file_desinfo(int fileindex,mission_info * out)
 	if(out==NULL)
 		return -1;
 
-	DebugPrintf("---- in func %s , fileindex = %d ----\n",__func__,fileindex);
+	netDebugPrintf("---- in func %s , fileindex = %d ----\n",__func__,fileindex);
 
 	switch(fileindex)
 	{
@@ -2067,7 +2078,7 @@ int request_file_desinfo_process(mission_list * mission,char * framdata,int fram
 	message msg;
 	file_desinfo_back backinfo;
 
-	DebugPrintf(" ----in fun %s ,------\n",__func__);
+	netDebugPrintf(" ----in fun %s ,------\n",__func__);
 	if(framdata==NULL || mission==NULL || out==NULL)
 		{
 			printf("in func %s paramiter is NULL \n",__func__);
@@ -2127,11 +2138,11 @@ int request_file_desinfo_process(mission_list * mission,char * framdata,int fram
 
 
 	#if CLIENT_DEBUG
-		DebugPrintf("--- 0x308A back info:\n");
-		DebugPrintf("file name:%s \n",backinfo.filename);
-		DebugPrintf("version:%02x%02x%02x%02x\n",backinfo.version[0],backinfo.version[1],backinfo.version[2],backinfo.version[3]);
-		DebugPrintf("file CRC:%02x%02x\n",backinfo.fileCRC[0],backinfo.fileCRC[1]);
-		DebugPrintf("file size:%02x%02x%02x%02x\n",backinfo.filesz[0],backinfo.filesz[1],backinfo.filesz[2],backinfo.filesz[3]);
+		netDebugPrintf("--- 0x308A back info:\n");
+		netDebugPrintf("file name:%s \n",backinfo.filename);
+		netDebugPrintf("version:%02x%02x%02x%02x\n",backinfo.version[0],backinfo.version[1],backinfo.version[2],backinfo.version[3]);
+		netDebugPrintf("file CRC:%02x%02x\n",backinfo.fileCRC[0],backinfo.fileCRC[1]);
+		netDebugPrintf("file size:%02x%02x%02x%02x\n",backinfo.filesz[0],backinfo.filesz[1],backinfo.filesz[2],backinfo.filesz[3]);
 
 		LongUnon ldata;
 		memcpy(ldata.longbuf,backinfo.filesz,4);
@@ -2139,7 +2150,7 @@ int request_file_desinfo_process(mission_list * mission,char * framdata,int fram
 		//ldata.longbuf[1]=backinfo.filesz[2];
 		//ldata.longbuf[2]=backinfo.filesz[1];
 		//ldata.longbuf[3]=backinfo.filesz[0];
-		DebugPrintf("file size:%d\n",ldata.i);
+		netDebugPrintf("file size:%d\n",ldata.i);
 	#endif
 	memcpy(out,&backinfo,sizeof(backinfo));
 
@@ -2166,7 +2177,7 @@ int create_dwonload_file_mission(mission_info * out)
 
 	/* find download which file */
 
-	DebugPrintf("--- in func %s --- \n",__func__);
+	netDebugPrintf("--- in func %s --- \n",__func__);
 	for(i=0;i<FILE_SUPPORT_MAX;i++)
 		{
 			if(dwnFilPro[i].status==1)
@@ -2176,8 +2187,8 @@ int create_dwonload_file_mission(mission_info * out)
 					memcpy(dwninfo.length,shdata.intbuf,2);
 					lgdata.i=dwnFilPro[i].offset;
 					memcpy(dwninfo.offset,lgdata.longbuf,4);
-					DebugPrintf("dwninfo.length=%02x%02x",dwninfo.offset[0],dwninfo.offset[1]);
-					DebugPrintf("dwninfo.offset=%02x%02x%02x%02x\n",dwninfo.offset[0],dwninfo.offset[1],dwninfo.offset[2],dwninfo.offset[3]);
+					netDebugPrintf("dwninfo.length=%02x%02x",dwninfo.offset[0],dwninfo.offset[1]);
+					netDebugPrintf("dwninfo.offset=%02x%02x%02x%02x\n",dwninfo.offset[0],dwninfo.offset[1],dwninfo.offset[2],dwninfo.offset[3]);
 					break;
 				}
 		}
@@ -2334,10 +2345,10 @@ int down_file_back_process(mission_list * mission,char * framdata,int framesz,in
 	
 #if CLIENT_DEBUG
 
-	DebugPrintf("----0x308B back info:\n");
-	DebugPrintf("download file:%s\n",backinfo.name);
-	DebugPrintf("offset:%d\n",offset.i);
-	DebugPrintf("download lenght:%d \n",len.i);
+	netDebugPrintf("----0x308B back info:\n");
+	netDebugPrintf("download file:%s\n",backinfo.name);
+	netDebugPrintf("offset:%d\n",offset.i);
+	netDebugPrintf("download lenght:%d \n",len.i);
 #endif
 
 	
@@ -2390,7 +2401,7 @@ int verify_download_file(int index , char *out)
 	
 	struct stat filinfo;
 
-	DebugPrintf("-------------- in func %s --- -----------\n",__func__);
+	netDebugPrintf("-------------- in func %s --- -----------\n",__func__);
 
 	if(access(dwnFilPro[index].tmpname,0)!=0)
 		{
@@ -2399,7 +2410,7 @@ int verify_download_file(int index , char *out)
 		}
 
 	stat(dwnFilPro[index].tmpname,&filinfo);
-	DebugPrintf("in func %s,file size = %d , dwnfilpro.destlen = %d\n",__func__,filinfo.st_size,dwnFilPro[index].destlen);
+	netDebugPrintf("in func %s,file size = %d , dwnfilpro.destlen = %d\n",__func__,filinfo.st_size,dwnFilPro[index].destlen);
 	
 	if(filinfo.st_size!=dwnFilPro[index].destlen)
 		{
@@ -2441,8 +2452,8 @@ int verify_download_file(int index , char *out)
 		crc[1]=sd.intbuf[0];
 	#endif
 	
-	DebugPrintf("in func %s, file crc=%02x%02x  dwnfilpro.crc=%02x%02x \n",__func__,crc[0],crc[1],dwnFilPro[index].filecrc[0],dwnFilPro[index].filecrc[1]);
-	DebugPrintf("in func %s, file size=%d  dwnfilpro.destsz=%d \n",__func__,count,dwnFilPro[index].destlen);
+	netDebugPrintf("in func %s, file crc=%02x%02x  dwnfilpro.crc=%02x%02x \n",__func__,crc[0],crc[1],dwnFilPro[index].filecrc[0],dwnFilPro[index].filecrc[1]);
+	netDebugPrintf("in func %s, file size=%d  dwnfilpro.destsz=%d \n",__func__,count,dwnFilPro[index].destlen);
 
 	if(count!=dwnFilPro[index].destlen)
 		{
@@ -2464,7 +2475,7 @@ int verify_download_file(int index , char *out)
 	lseek(fd,0,SEEK_END);
 	write(fd,dwnFilPro[index].ver,2);
 	close(fd);
-	DebugPrintf("-- in func %s ,verify file success \n",__func__);
+	netDebugPrintf("-- in func %s ,verify file success \n",__func__);
 	return 0;
 }
 
@@ -2489,7 +2500,7 @@ int create_send_file_info_mission(int index,unsigned char * incrc,mission_info *
 	memcpy(sendinfo.ver,lgdata.longbuf,4);
 	memcpy(sendinfo.fileCRC,incrc,2);
 	
-	DebugPrintf("---- in func %s ----\n",__func__);
+	netDebugPrintf("---- in func %s ----\n",__func__);
 	
 	if(out==NULL)
 			return -1;
@@ -2574,7 +2585,7 @@ int send_file_back_process(mission_list * mission,char * framdata,int framesz)
 	send_file_back backinfo;
 
 
-	DebugPrintf("----- in func %s ------\n",__func__);
+	netDebugPrintf("----- in func %s ------\n",__func__);
 	if(framdata==NULL || mission==NULL )
 			{
 				printf("in func %s paramiter is NULL \n",__func__);
@@ -2632,7 +2643,7 @@ int send_file_back_process(mission_list * mission,char * framdata,int framesz)
 
 	memcpy(&backinfo,msg.data,sizeof(backinfo));
 
-	DebugPrintf("-- in func %s: filename=%s , state=%d\n",__func__,backinfo.name,backinfo.state);
+	netDebugPrintf("-- in func %s: filename=%s , state=%d\n",__func__,backinfo.name,backinfo.state);
 
 	int i;
 	char cmd[128];
@@ -2717,7 +2728,7 @@ int read_datas_tty(int fd,unsigned char *buffer,int * revlen)
     }
 
 	*revlen=rilen;
-    return SUCCESS;
+    return SUCCESS_OK;
 }
 
 
@@ -2746,7 +2757,7 @@ int recive_data(char * out,int * outlen)
 		readfailcounts++;
 		return -1;
 	}
-	else if(ret==SUCCESS)
+	else if(ret==SUCCESS_OK)
 	{	
 		rcvlen+=len;
 		if(rcvlen>(2+SYN_INFO_LEN+COMPRESS_LEN+MSG_TYPE_LEN+VERSION_LEN+POS_ID_LEN))
@@ -2782,15 +2793,15 @@ int recive_data(char * out,int * outlen)
 	int pos=0;
 	unsigned short mesglen;		//数据包大小
 
-	DebugPrintf("in func %s recive[0][1]=%02x%02x\n",__func__,total_cache[0],total_cache[1]);
+	netDebugPrintf("in func %s recive[0][1]=%02x%02x\n",__func__,total_cache[0],total_cache[1]);
 	//mesglen=bcd_to_bin(total_cache+pos,2);				//长度这里可能不是用bcd码
 	mesglen=((total_cache[0+pos]<<8) & 0xff00) | total_cache[1+pos];
-	DebugPrintf("in func %s mesglen=%d \n",__func__,mesglen);
+	netDebugPrintf("in func %s mesglen=%d \n",__func__,mesglen);
 		
 	if((mesglen+2)==rcvlen)		/*获取到一帧数据*/
 	{
 
-		DebugPrintf("------------get one frame data------------\n");
+		netDebugPrintf("------------get one frame data------------\n");
 		*outlen=rcvlen;
 		memcpy(out,total_cache,rcvlen);
 		rcvlen= 0;
@@ -2880,7 +2891,7 @@ int client_react_server()
 				return 0;
 		}
 
-		DebugPrintf("---- --in func %s -----\n",__func__);
+		netDebugPrintf("---- --in func %s -----\n",__func__);
 
 		/*
 			建立短连接
@@ -2888,7 +2899,7 @@ int client_react_server()
 		printf(" create short connect !!!\n");
 		close(sockfd);
 		ret=create_sorket(ipbuf, port,&sockfd);
-		if(ret!=SUCCESS)
+		if(ret!=SUCCESS_OK)
 		{
 			printf("create sockect falied \n");
 			display_neterr(ret);
@@ -3012,7 +3023,7 @@ int client_react_server()
 							if(ret=0)
 								{
 									/*通知自动上传线程该条记录上传成功，准备上传下一条*/
-									DebugPrintf(" send record success \n");
+									netDebugPrintf(" send record success \n");
 								}
 							else{
 									/*通知自动上传线程该条记录上传失败，并做相应处理*/
@@ -3266,7 +3277,7 @@ void * main_client_thread(void * args)
 				sleep(3);
 
 				ret=create_sorket(ipbuf, port,&sockfd);
-				if(ret!=SUCCESS)
+				if(ret!=SUCCESS_OK)
 				{
 					printf("create sockect falied \n");
 					display_neterr(ret);
@@ -3432,8 +3443,150 @@ void * send_thread(void * args)
 */
 
 
-/*test program*/
+/*
+	该线程只针对4g 模块
+*/
 
+//extern void Display_signal(unsigned char type);
+extern int bp_fd;
+static unsigned char net_cdma_rest(unsigned int dev)
+{
+	     	w55fa93_setio(GPIO_GROUP_D, 6, 1);
+	     	usleep(150000);
+	     	w55fa93_setio(GPIO_GROUP_D, 6, 0);	
+		sleep(7);
+		return 0;
+}
+
+void * pppd_connect_thread(void * argv)		//拨号线程
+{
+	static time_t now,old;
+
+	signal(SIGPIPE,SIG_IGN);  //关闭SIGPIPE信号，防死机
+	time(&now);
+	old=now;
+	int i;
+	struct stat file_info;
+	int connecttype=4;	//联网方式
+	int g_EnableCallPPPD =0;
+	
+	switch(connecttype)
+		{
+			case 4:
+				net_cdma_rest(4);
+	    			//Display_signal(70);
+				sleep(30); //13
+				//Display_signal(10);
+        			system("pppd call wcdma  > /dev/null&");
+				g_EnableCallPPPD = 1;
+				sleep(10);
+				break;
+								
+			default:
+				break;
+		}
+	
+PPP_AGAINE:
+		update_net_device_satus(0);
+		while(1){
+			sleep(5);
+			system("ifconfig > /var/run/ppp0.txt");
+			stat("/var/run/ppp0.txt" , &file_info);
+			if(file_info.st_size!=0)
+			{
+				printf("\n拨号已成功!!!!!!!!!\n");
+				//Display_signal(20);
+				system("rm /var/run/ppp0.txt");
+				system("sync");
+				i = 0;
+				update_net_device_satus(1);
+				break;
+			}
+			else
+			{
+				sleep(1);
+				i++;
+				if(i >= 50)	///10mins  100
+				{
+					if (g_EnableCallPPPD)
+					{
+						//system("ppp-off ");
+						system("/etc/ppp/peers/quectel-ppp-kill.sh");
+						system("kill -9 $(ps | grep \"pppd call gprs\" |grep -v 'grep' | awk '{print $1}')");
+						system("kill -9 $(ps | grep \"/etc/ppp/gprs\" |grep -v 'grep' | awk '{print $1}')");
+						system("killall -9 pppd");
+						system("killall chat");
+					}
+					sleep(1);
+					net_cdma_rest(4);
+					//Display_signal(70);
+           
+					 sleep(30);  //13
+				   //	 Display_signal(10);
+					system("pppd call wcdma  > /dev/null &");
+					g_EnableCallPPPD = 1;
+					sleep(10);
+					goto PPP_AGAINE;
+					
+				}
+				
+			}
+		}
+
+		int checkflag=0;
+		while(1)
+		{
+			while(1)
+			{	
+				//timer 5minu 
+				time(&now);
+				if(((now-old )< (10*60))&&(checkflag==0))
+					{
+						break;
+					}
+				else if (checkflag)
+					checkflag=0;
+				else{
+					old=now;
+					checkflag=1;
+					}
+			
+				system("ifconfig > /var/run/ppp0.txt");
+				stat("/var/run/ppp0.txt" , &file_info);
+				if(file_info.st_size!=0)
+				{
+					printf("\n网络状况:正常 !!!!!!!!!\n");
+					//Display_signal(20);
+					system("rm /var/run/ppp0.txt");
+					system("sync");
+					i = 0;
+					update_net_device_satus(1);
+					
+					printf("check gprs state--\n"); 	
+					system("ping 8.8.8.8 -c 1 -s 8");
+					usleep(5000);			
+					//解锁
+				}
+				else{
+					
+					printf("网络异常 gprs 重拨\n");
+					update_net_device_satus(0);
+					
+					goto PPP_AGAINE;
+					break;
+					}
+			}
+
+		sleep(5);
+	}
+		
+}
+
+
+
+
+/*test program*/
+#if 0
 int main()
 {
 
@@ -3463,3 +3616,9 @@ int main()
 		return 0;
 		
 }
+
+#endif
+
+
+
+

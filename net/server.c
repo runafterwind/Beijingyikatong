@@ -10,6 +10,7 @@
 
 
 #define portnumber 5800
+#if 0
 
 int main(int argc,char * argv[])
 {
@@ -80,5 +81,5 @@ int main(int argc,char * argv[])
     }
     exit(0);
 } 
-
+#endif
 

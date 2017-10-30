@@ -293,6 +293,44 @@ typedef struct {
 
 extern FileM5 filem5;
 
+/*
+m5 文件本地卡
+*/
+typedef struct {
+    unsigned char phycardtype;          //卡片物理类型
+    unsigned char logiccardtype;        //卡片逻辑卡类型        13种卡
+    unsigned char cardattr;             //卡片属性   0x01:普通储值卡    0x02:计次卡     0x03:定期卡   0x04:特殊储值卡
+    unsigned char consumemode;          //收费模式   高4位使用模式  低4位表示提示模式
+    ShortUnon 		minblancelimit;    //最小余额限制  卡内余额小于此金额不允许交易  单位分 2HEX
+    ShortUnon 		overdraw;          //最大透支限额  单位分  2HEX
+    LongUnon 		maxblancelimit;    //最大余额限制  卡内余额大于此金额不允许交易  单位分   4hex
+    ShortUnon 		maxdebit;          //最大扣款额度  2hex
+    unsigned char   indiscontrate;        //界内优惠率
+    ShortUnon 		indiscontlimit;    //界内优惠额度 2hex
+    unsigned char   outdiscontrate;       //界外优惠率
+    ShortUnon	        outdiscontlimit;   //界外优惠额度 2hex       //预留
+}FileM5_T;
+extern FileM5_T CardConParam[CARD_NUMBER];
+
+/*
+m5 文件异地卡
+*/
+
+typedef struct {
+    unsigned char cardissuerlabel[8];   //发卡机构标识
+    unsigned char logiccardtype;        //卡片逻辑卡类型        13种卡   
+    unsigned char consumemode;          //收费模式   高4位使用模式  低4位表示提示模式    
+    ShortUnon overdraw[2];          //最大透支限额  单位分
+    LongUnon maxblancelimit[4];    //最大余额限制  卡内余额大于此金额不允许交易  单位分
+    ShortUnon maxdebit[2];          //最大扣款额度
+    unsigned char indiscontrate;        //界内优惠率
+    ShortUnon indiscontlimit[2];    //界内优惠额度
+    unsigned char outdiscontrate;       //界外优惠率
+    ShortUnon outdiscontlimit[2];   //界外优惠额度
+
+}FileM5_R;
+extern FileM5_R CardConParam_remotcard[CARD_NUMBER];
+
 //下载的MP费率卡二次发行信息文件
 typedef struct{
 	unsigned char linenum[2];			// 线路号	
@@ -324,24 +362,8 @@ extern FileMP filemp;
 
 
 
-/*
-m5 文件
-*/
-typedef struct {
-    unsigned char phycardtype;          //卡片物理类型
-    unsigned char logiccardtype;        //卡片逻辑卡类型        13种卡
-    unsigned char cardattr;             //卡片属性   0x01:普通储值卡    0x02:计次卡     0x03:定期卡   0x04:特殊储值卡
-    unsigned char consumemode;          //收费模式   高4位使用模式  低4位表示提示模式
-    ShortUnon 		minblancelimit;    //最小余额限制  卡内余额小于此金额不允许交易  单位分 2HEX
-    ShortUnon 		overdraw;          //最大透支限额  单位分  2HEX
-    LongUnon 		maxblancelimit;    //最大余额限制  卡内余额大于此金额不允许交易  单位分   4hex
-    ShortUnon 		maxdebit;          //最大扣款额度  2hex
-    unsigned char   indiscontrate;        //界内优惠率
-    ShortUnon 		indiscontlimit;    //界内优惠额度 2hex
-    unsigned char   outdiscontrate;       //界外优惠率
-    ShortUnon	        outdiscontlimit;   //界外优惠额度 2hex       //预留
-}FileM5_T;
-extern FileM5_T CardConParam[CARD_NUMBER];
+
+
 
 
 
