@@ -5011,16 +5011,25 @@ void SetBusDeviceTime(unsigned char *time, unsigned char set_flag)
 	hour = buff[3];
 	min = buff[4];
 	sec = buff[5];
-	memset(buff, 0, sizeof(buff));
+	
 	if (set_flag == 1)
 	{
-		//sprintf(buff,"20%02x-%02x-%02x %02x:%02x:%02x",Data[4],\
-		//Data[5],Data[6],Data[7],Data[8],Data[9]);
+		year = (time[2]-'0')*10+(time[3]-'0');
+		month = (time[4]-'0')*10+(time[5]-'0');
+		day = (time[6]-'0')*10+(time[7]-'0');
 	} else if (set_flag == 2) {
-		
+		hour = (time[0]-'0')*10+(time[1]-'0');
+		min = (time[2]-'0')*10+(time[3]-'0');
+		sec = (time[4]-'0')*10+(time[5]-'0');
 	} else if (set_flag == 3) {
 
 	}
+
+	
+	sprintf(buff,"20%02x-%02x-%02x %02x:%02x:%02x",time[0],\
+		time[1],time[2],time[3]);
+	memset(buff, 0, sizeof(buff));
+	
 	
 	status	= Wr_time(buff);
 	if(status == 0)

@@ -3596,6 +3596,23 @@ unsigned char InitSystem(void)
         ShowMessage(0,56,16,"加载卡类信息文件失败");
 		exit(-1);
 	}
+
+	Filebuf = fopen("/mnt/record/MP","a+");
+
+	if(Filebuf)
+	{
+		printf("open /mnt/record/MP ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/MP\n");
+        ShowMessage(0,56,16,"加载设备信息文件失败");
+		exit(-1);
+	}
+	
 	
     ShowMessage(0,56,16,"加载设备运行文件成功");
     
