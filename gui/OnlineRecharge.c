@@ -156,9 +156,9 @@ unsigned char g_FgCardLanQRCode = 0;
 
 extern LongUnon WatcherCard;
 extern LongUnon SeDriverCard;
-unsigned char g_DevNoInBus = 0; //变量用于定于车上终端机编号，一般车上有3个车载机
+unsigned char g_DevNoInBus = 0; //变量用于车上终端机编号，一般车上有3个车载机
 
-
+unsigned char g_CallStationNo;
 
 
 int CheckLineCardlanBin(unsigned char num1,unsigned char num2);
@@ -4865,10 +4865,11 @@ void SectionStaion_Uart(unsigned char *databuf)
         while (UARTReadIndex < UARTWriteIndex)
         {
         	#ifdef  ZHEJIANG_ANJI
-	 CheckUARTPacket_AnJi(UARTRxBuff[UARTReadIndex]);
-	 #else
-           CheckUARTPacket(UARTRxBuff[UARTReadIndex]);
-	 #endif
+			 CheckUARTPacket_AnJi(UARTRxBuff[UARTReadIndex]);
+			 #else
+		         //  CheckUARTPacket(UARTRxBuff[UARTReadIndex]);
+		        CheckUARTPacket_beijing(UARTRxBuff[UARTReadIndex]);
+			 #endif
            // CheckUARTPacket_one(UARTRxBuff[UARTReadIndex]);
             UARTReadIndex++;
         }
@@ -4877,11 +4878,12 @@ void SectionStaion_Uart(unsigned char *databuf)
     {
         while (UARTReadIndex < UART_BUFFER_SIZE)
         {
-        	   #ifdef  ZHEJIANG_ANJI
-	 CheckUARTPacket_AnJi(UARTRxBuff[UARTReadIndex]);
-	 #else
-            CheckUARTPacket(UARTRxBuff[UARTReadIndex]);
-	 #endif
+	        #ifdef  ZHEJIANG_ANJI
+			 CheckUARTPacket_AnJi(UARTRxBuff[UARTReadIndex]);
+			 #else
+		        //    CheckUARTPacket(UARTRxBuff[UARTReadIndex]);
+		        CheckUARTPacket_beijing(UARTRxBuff[UARTReadIndex]);
+			 #endif
             //CheckUARTPacket_one(UARTRxBuff[UARTReadIndex]);
             UARTReadIndex++;
         }
@@ -4890,10 +4892,11 @@ void SectionStaion_Uart(unsigned char *databuf)
         while (UARTReadIndex < UARTWriteIndex)
         {
             #ifdef  ZHEJIANG_ANJI
-	 CheckUARTPacket_AnJi(UARTRxBuff[UARTReadIndex]);
-	 #else
-            CheckUARTPacket(UARTRxBuff[UARTReadIndex]);
-	 #endif
+			 CheckUARTPacket_AnJi(UARTRxBuff[UARTReadIndex]);
+			 #else
+		          //  CheckUARTPacket(UARTRxBuff[UARTReadIndex]);
+		     CheckUARTPacket_beijing(UARTRxBuff[UARTReadIndex]);
+			 #endif
            //CheckUARTPacket_one(UARTRxBuff[UARTReadIndex]);
             UARTReadIndex++;
         }
@@ -4927,19 +4930,109 @@ unsigned char CalCRC(unsigned char *ptr, unsigned char len)
     return (crc); 
 }
 
-int RetCtrlCmdStatus(char *cmd)
+int RetCtrlCmdStatus(char *cmd)//, unsigned char set)
 {
 	unsigned char sendbuf[40];
+	unsigned char  len;
 	memset(sendbuf, 0, sizeof(sendbuf));
-	
-	if (!memcmp(cmd, CMD_FUNC_REQ, 2))
-}
-	
+	len = 0;
+	if (!memcmp(cmd, CMD_FUNC_REQ, 2)) //?
+	{
+		sendbuf[len++] = DEV_TYPE_POS;
+		len = 8;
+	}
+	else if (!memcmp(cmd, CMD_FUNC_DIR_NO, 2)){
+		sprintf(sendbuf+len, "02%d", Section.Sationdis);
+		len += 2;
+		len += 1; // 0
+		sendbuf[len++] = g_CallStationNo;
+		len += 3; // 0
+		sendbuf[len++] = Section.Updown;//0 up . 1 down
+	}
+	else if (!memcmp(cmd, CMD_FUNC_DATE, 2)){
+		
+	}
 
+
+	write(uart4_fd, sendbuf, len);
+	return 0;
+}
+void SetBusDeviceStation(unsigned char *buf)
+{
+	unsigned char current_station, dir, callno;
+	current_station = (buf[0]-'0')*10+(buf[1]-'0');
+	callno = buf[2]-'0';
+	dir = buf[3]-'0';
+	if(Section.Updown == 1)  //下行
+	{
+		if (dir == 0)  //报站器上行，so change
+		{
+			SectionSta(0, 1);
+			 if(current_station < SectionNum)
+    		{
+	   			 Section.Sationdis = current_station;				//当前站台编号
+       				 Section.SationNow = current_station + 1;
+			 }
+			 return;
+		}
+		SectionSta(current_station, 0);
+	}
+	else
+	{
+		if (dir)  //报站器下行，so change
+		{
+			SectionSta(1, 1);
+			 if(current_station < SectionNum)
+    		{
+	   			 Section.Sationdis = current_station;				//当前站台编号
+       				 Section.SationNow = current_station + 1;
+			 }
+			 return;
+		}
+		SectionSta(current_station, 0);
+	}
+}
+/*
+
+1set date 
+2set time
+3 set date time
+*/
+void SetBusDeviceTime(unsigned char *time, unsigned char set_flag)
+{
+	unsigned char buff[32]={0};
+	char status;
+	unsigned char year,month,day,hour,min,sec;
+	Rd_time (buff);
+	year = buff[0];
+	month = buff[1];
+	day = buff[2];
+	hour = buff[3];
+	min = buff[4];
+	sec = buff[5];
+	memset(buff, 0, siezof(buff));
+	if (set_flag == 1)
+	{
+		//sprintf(buff,"20%02x-%02x-%02x %02x:%02x:%02x",Data[4],\
+		//Data[5],Data[6],Data[7],Data[8],Data[9]);
+	} else if (set_flag == 2) {
+		
+	} else if (set_flag == 3) {
+
+	}
+	
+	status	= Wr_time(buff);
+	if(status == 0)
+	{
+		system ("hwclock -w");
+		system ("hwclock -s");
+	}
+}
 void CheckUARTPacket_beijing(char ch)
 {
 	unsigned char len = 0;
 	unsigned char cmdstr[3];
+	
 	if (((ch & 0xf0) == g_DevNoInBus) && (UARTPacketIndex == 0))
 	{
    	    UARTPacket[UARTPacketIndex] = ch;
@@ -4959,7 +5052,7 @@ void CheckUARTPacket_beijing(char ch)
 	if (UARTPacketIndex < 3) return;
 		
 	len = UARTPacket[1];
-   if (UARTPacketIndex != (len+3))// rcv finish
+   if (UARTPacketIndex != (len+3))// rcv finish?
    		return;
 
 	if (UARTPacket[2] != CMD_FLAG_CH)
@@ -4978,7 +5071,18 @@ void CheckUARTPacket_beijing(char ch)
    memcpy(cmdstr, UARTPacket+3, 2)
    if (!memcmp(cmdstr, CMD_FUNC_REQ, 2))
    {
-
+		RetCtrlCmdStatus(CMD_FUNC_REQ);
+   } else if (!memcmp(cmdstr, CMD_FUNC_DIR_NO, 2)){
+		if (len > 3){//set
+			SetBusDeviceStation(UARTPacket+5);
+		}
+		RetCtrlCmdStatus(CMD_FUNC_DIR_NO);
+   } else if (!memcmp(cmdstr, CMD_FUNC_DATE, 2)) {
+   		if (len > 3){
+			
+		}
+			
+		
    }
 
 }

@@ -97,6 +97,8 @@ extern unsigned char PsamNum[6];
 extern unsigned char *StationdisupParBuf;
 extern unsigned char *StationdisdownParBuf;
 struct GetOnOff_Struct GetOnOffInfo;
+unsigned char g_CardCurrentMode = USECARD_MODE;
+
 
 #if 1
 void print_debug(unsigned char *tips,const unsigned char *data , const unsigned int dataLen)
@@ -10550,7 +10552,7 @@ unsigned char ReadM1CardType(void)
 #if 1
 /*
 返回值: -1 是没有找到卡类
--2 此卡在本线路进制使用
+-2 此卡在本线路禁止使用
 -3 余额小于规定的最小值，或大于规定的最大值
 -4 大于透支额度
 
@@ -11313,11 +11315,13 @@ int M1CardSwipeStatus(void)
 	switch(cardtype)
 	{
 		case OPERATOR_CARD:    //管理卡
-			OperCardTransStatus();
+			if (g_CardCurrentMode == OPERATOR_MODE)
+				OperCardTransStatus();
 			break;
 
 		default:
-			ret = UserCardTransStatus();
+			if (g_CardCurrentMode == USECARD_MODE)
+				ret = UserCardTransStatus();
 			break;
 	}
 

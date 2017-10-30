@@ -132,6 +132,7 @@ pthread_mutex_t m_Blacklist = PTHREAD_MUTEX_INITIALIZER;
 struct timeval test1,test2;
 #endif
 
+extern unsigned char g_CardCurrentMode;
 
 /************************************************************/
 

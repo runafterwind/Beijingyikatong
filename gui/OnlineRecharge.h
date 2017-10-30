@@ -73,6 +73,11 @@ struct DALI_TransferMsg {
 #define		CMD_FUNC_CHECK_PARAM		"68"
 
 
+
+extern void CheckUARTPacket_beijing(char ch);
+
+
+
 extern unsigned char SectionSta(unsigned char srct,unsigned char type);
 extern void SectionApp(void);
 extern void ReportCardType();
