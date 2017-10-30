@@ -1,7 +1,7 @@
 //包含头文件
 #include  "apparel.h"
 #include "../gui/RC500.h"
-//#include "../gui/cpucard.h"
+#include "../gui/cpucard.h"
 #include "../gui/InitSystem.h"
 #include "../gui/des.h"
 #include "../gui/OnlineRecharge.h"
@@ -955,41 +955,34 @@ int main(int argc,const char** argv)
               #ifdef NEW0409
                 SetTextSize(48);
                #else
-                SetTextSize(32);
+                SetTextSize(24);
                #endif
 
 
                 Display_signal(ConnectFlag);
-
-                if(Section.Enable != 0x55)
-                {
-                    #ifdef NEW0409
-                        TextOut(0,75, "欢迎使用");
-                    #else
-                        TextOut(100,35, "欢迎使用");
-                    #endif
-                }
-                else
+                
                 {
                     memset(Buffer,0,sizeof(Buffer));
+					/*显示线路名和站点*/
+					memcpy(Buffer,filemp.linename,16);
                     /***
-                    需修改显示站名
-                    ***/
+                  			  需修改显示站名
+                  			  ***/
                     if(Section.Updown  == 0x00)
                     {
-                      //  sprintf(Buffer,"上行 站号:%02d",Section.Sationdis);
+                        sprintf(Buffer+16,"   上行 站号:%02d",Section.Sationdis);
                       //	sprintf(Buffer,"上行 站号:%02d",Section.Sationkey);
-                      sprintf(Buffer,"上行 建国门");    //测试显示
+                     // sprintf(Buffer,"上行");    //测试显示
                     }
                     else
                     {
-                      //  sprintf(Buffer,"下行 站号:%02d",Section.Sationdis);
-                       //sprintf(Buffer,"下行 站号:%02d",Section.Sationkey);
+                        sprintf(Buffer+16,"   下行 站号:%02d",Section.Sationdis);
+                      // sprintf(Buffer,"下行 站号:%02d",Section.Sationkey);
                     }
                     #ifdef NEW0409
                         TextOut(0,75, Buffer);
                     #else
-                        TextOut(0,25,Buffer);
+                        TextOut(100,25,Buffer);
                     #endif
                 }
 
@@ -1001,21 +994,22 @@ int main(int argc,const char** argv)
                     修改显示票价基价,待从服务器上下载正式票价来显示
                     ***/
                     unsigned char temp[20];           
-                   // AnalysisSheetcheck();                
+                 // AnalysisSheetcheck();                
              
                  //   printf("价格 = %d 固定价格:=%d \n",HostValue.i,Fixvalue.i);
         			memset(temp,0,sizeof(temp));
                     strcpy(temp,"票价:");
-                    value.i = 0;
-                    memcpy(value.intbuf,flc0005.gbasicpice,2);
-        			MoneyValue(temp+5,value.i);
+                   // value.i = 0;
+                  //  memcpy(value.intbuf,flc0005.gbasicpice,2);
+        			MoneyValue(temp+5,filemp.defaultbaseprice.i);
         			TextOut(0,70,temp);
                  #endif
-
+				
+				GetSectionKMFromPara(0,Section.Sationdis);
                 #ifdef NEW0409
                   TextOut(0,210, "请刷卡"); 
                 #else
-                  TextOut(115,110, "请刷卡");
+                  TextOut(0,110, GetOnOffInfo.On_Name);
                 #endif                
 
                 SetTextSize(16);               
