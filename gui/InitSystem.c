@@ -2651,6 +2651,11 @@ void CardLanFile (unsigned char RW_Type)
 		{
            
 			ParaFile = fopen("/mnt/record/M4","rb+");
+			if (NULL == ParaFile) break;
+			memset(buffer,0,sizeof(buffer));
+			result=fread(buffer,sizeof(unsigned char),6,ParaFile);
+			memcpy(filem4.uprecordnum.intbuf,buffer+1,2);
+			memcpy(filem4.downrecordnum.intbuf,buffer+4,2);
             max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
 	        ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
@@ -2677,6 +2682,11 @@ void CardLanFile (unsigned char RW_Type)
 		{       
 			
 			ParaFile = fopen("/mnt/record/M4","rb+");
+			if (NULL == ParaFile) break;
+			memset(buffer,0,sizeof(buffer));
+			result=fread(buffer,sizeof(unsigned char),6,ParaFile);
+			memcpy(filem4.uprecordnum.intbuf,buffer+1,2);
+			memcpy(filem4.downrecordnum.intbuf,buffer+4,2);
 			max = filem4.downrecordnum.i*filem4.downrecordnum.i;				   //需要修改根据票价参数定义个数
 			ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
@@ -2720,8 +2730,9 @@ void CardLanFile (unsigned char RW_Type)
 			result = fseek(ParaFile, 4, SEEK_SET);
 			i = 5;
 			do {
-				result += fread(StationdisupParBuf,sizeof(unsigned char),mkLengthUp-result,ParaFile);
+				result += fread(StationdisupParBuf+result,sizeof(unsigned char),mkLengthUp-result,ParaFile);
 				i--;
+				if(feof(ParaFile)) break;
 			}while(i && (result != mkLengthUp));
 			//memcpy(StationdisupParBuf+i*512,buffer,512);
 		}
@@ -2753,8 +2764,9 @@ void CardLanFile (unsigned char RW_Type)
 			i = 5;
 			result = 0;
 			do {
-				result += fread(StationdisdownParBuf,sizeof(unsigned char),mkLengthDown-result,ParaFile);
+				result += fread(StationdisdownParBuf+result,sizeof(unsigned char),mkLengthDown-result,ParaFile);
 				i--;
+				if(feof(ParaFile)) break;
 			}while(i && (result != mkLengthDown));
 			
 		}
@@ -3503,85 +3515,80 @@ unsigned char InitSystem(void)
     #endif
 
 
-	Filebuf = fopen(SECTION_FILE_PATH,"a+");
+	
+
+	
+
+	
+	
+
+	
+
+	Filebuf = fopen(SECTION_KM_PATH_NAME,"a+");
 
 	if(Filebuf)
 	{
-		printf("open /mnt/record/section.sys ok!\n");
+		printf("open /mnt/record/M3 ok!\n");
 		fclose(Filebuf);
 	}
 	else
 	{
 		close(bp_fd);
 		close(mf_fd);
-		printf("Can't open /mnt/record/section.sys\n");
-        ShowMessage(0,56,16,"加载分段信息文件失败");
+		printf("Can't open /mnt/record/M3\n");
+        ShowMessage(0,56,16,"加载公里数文件失败");
 		exit(-1);
 	}
 
-	Filebuf = fopen(SECTIONUP_FILE_PATH,"a+");
+	Filebuf = fopen(PARM_FILE_PATH,"a+");
+
 	if(Filebuf)
 	{
-		printf("open /mnt/record/sectionup.sys ok!\n");
+		printf("open /mnt/record/M4 ok!\n");
 		fclose(Filebuf);
 	}
 	else
 	{
 		close(bp_fd);
 		close(mf_fd);
-		printf("Can't open /mnt/record/sectionup.sys\n");
-        ShowMessage(0,56,16,"加载分段信息文件失败");
+		printf("Can't open /mnt/record/M4\n");
+        ShowMessage(0,56,16,"加载站点信息文件失败");
 		exit(-1);
 	}
-
-	Filebuf = fopen(SECTIONDISUP_FILE_PATH,"a+");
+	
+	Filebuf = fopen("/mnt/record/M5","a+");
 
 	if(Filebuf)
 	{
-		printf("open /mnt/record/stationdisup.sys ok!\n");
+		printf("open /mnt/record/M5 ok!\n");
 		fclose(Filebuf);
 	}
 	else
 	{
 		close(bp_fd);
 		close(mf_fd);
-		printf("Can't open /mnt/record/stationdisup.sys\n");
-        ShowMessage(0,56,16,"加载上行公里文件失败");
+		printf("Can't open /mnt/record/M5\n");
+        ShowMessage(0,56,16,"加载卡类信息文件失败");
 		exit(-1);
 	}
 
-	Filebuf = fopen(SECTIONDISDOWN_FILE_PATH,"a+");
+	Filebuf = fopen("/mnt/record/MP","a+");
+
 	if(Filebuf)
 	{
-		printf("open /mnt/record/stationdisdown.sys ok!\n");
+		printf("open /mnt/record/MP ok!\n");
 		fclose(Filebuf);
 	}
 	else
 	{
 		close(bp_fd);
 		close(mf_fd);
-		printf("Can't open /mnt/record/stationdisdown.sys\n");
-        ShowMessage(0,56,16,"加载下行公里文件失败");
+		printf("Can't open /mnt/record/MP\n");
+        ShowMessage(0,56,16,"加载设备信息文件失败");
 		exit(-1);
 	}
-
-	Filebuf = fopen(BASICRATE_FILE_PATH,"a+");
-
-	if(Filebuf)
-	{
-		printf("open /mnt/record/basicrate.sys ok!\n");
-		fclose(Filebuf);
-	}
-	else
-	{
-		close(bp_fd);
-		close(mf_fd);
-		printf("Can't open /mnt/record/basicrate.sys\n");
-        ShowMessage(0,56,16,"加载基本费率文件失败");
-		exit(-1);
-	}
-
-
+	
+	
     ShowMessage(0,56,16,"加载设备运行文件成功");
     
     g_FgFileOccurError = 0;

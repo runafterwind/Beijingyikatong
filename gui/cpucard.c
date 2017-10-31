@@ -4682,6 +4682,69 @@ unsigned char TopUpCardInfor_CPU(int type)
 	return status;
 }
 
+
+
+int FindCardTypeAmount(unsigned char logictype, unsigned short balance, unsigned short time_inter, unsigned char *beepmode)
+{
+	int i;
+	unsigned char mode;
+	ShortUnon tmp;
+	
+
+	mode = CardConParam[i].consumemode & 0xf0;
+	if (mode != 1 && mode != 2) {
+		return -2; 	  // 此卡在本线路禁止使用
+	}
+
+	if (balance < CardConParam[i].minblancelimit.i || balance > CardConParam[i].maxblancelimit.i) 
+	{
+		printf("balance is error  bal = %u, limit = %u, max = %u \n", balance, CardConParam[i].minblancelimit.i, CardConParam[i].maxblancelimit.i);
+		return -3;
+	}
+	
+	*beepmode = CardConParam[i].consumemode & 0x0f;
+
+	memcpy(tmp.intbuf, flc0005.gbupiaolimittime, 2);
+	if (time_inter > tmp.i)   // 界外的
+	{
+		HostValue.i = (HostValue.i*CardConParam[i].outdiscontrate)/100;
+	}
+	else  // 内
+	{
+		HostValue.i = (HostValue.i*CardConParam[i].indiscontrate)/100;
+	}
+
+	if (HostValue.i > CardConParam[i].maxdebit.i)
+		HostValue.i = CardConParam[i].maxdebit.i;
+	if (HostValue.i > balance)
+	{
+		tmp.i = HostValue.i - balance; // 透支限额
+		if (tmp.i > CardConParam[i].overdraw.i)
+			return -4;
+	}
+	
+#if 0
+	switch(LocalCardRate[i].cardattr)
+	{
+		case 0x01: // 普通储值卡
+			break;
+		case 0x02: // 计次卡
+			break;
+		case 0x03: // 定期卡
+			break;
+		case 0x04: // 特殊储值卡
+			break;
+		default:
+			break;
+	}
+#endif
+	
+
+}
+
+
+
+
 unsigned char SupportType_Cpu_jiaotong(unsigned char cardtype)
 {
 	
@@ -4714,37 +4777,34 @@ unsigned char SupportType_Cpu_jiaotong(unsigned char cardtype)
     	return status;
 }
 
-unsigned char SupportType_Cpu_zhujian(unsigned char cardtype)
+unsigned char SupportType_Cpu_zhujian(unsigned char cardtype,unsigned char *addr,unsigned char *outcardtype,unsigned char *rate)
 {
 	
 	unsigned char i = 0,status = 1;
 	unsigned char card_type;
-    unsigned char NandBuf[13];
-    
-    card_type=cardtype;
-    DBG_PRINTF("card_type=%02x\n",card_type);
-
-    for(i=0;i<13;i++)
-    {
-	    NandBuf[i]=CardLanBuf[512+i*48+1];
-        }
-    DBG_PRINTF("支持的卡类:");
-	menu_print(NandBuf, 13);
-	for(i = 0; i< 13; i++)
+    for(i=0; i<CARD_NUMBER; i++)
 	{
-    		//  printf("%02X",NandBuf[i]);
-    		if(NandBuf[i] == 0) 
-		        break;
-    		else
-    		{
-        		if(NandBuf[i] == card_type)
-			    status = 0;
-    		}
-    		if(status == MI_OK)
-		break;
+		if(cardtype == CardConParam[i].logiccardtype)
+			break;
+	}
+	if (i == CARD_NUMBER) //can't find the card's parameter
+	{
+		if (filemp.modebj == 0)
+			return -1; 
+		else if (filemp.modebj  == 0x01){
+			*outcardtype = 1;
+			*rate = 0x01;		
+		} else if (filemp.modebj  == 0x02) {
+			*outcardtype = 1;
+			*rate = 0x02;
+		}
+		i = 0;
 	}
 
-    	return status;
+	*addr = i;
+    
+   
+   	return status;
 }
 
 unsigned char ReadCardInfor_CPU(void)
