@@ -493,6 +493,10 @@ extern unsigned char SectionFares_8bit(void);
 
 #define CARD_NUMBER				19
 
+#define OPERATOR_MODE			1
+#define USECARD_MODE			2
+
+
 
 /*¶ÁÈ¡ÉÈÇø*/
 #define SC_ZERO		0x01

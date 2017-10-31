@@ -2718,8 +2718,9 @@ void CardLanFile (unsigned char RW_Type)
 			result = fseek(ParaFile, 4, SEEK_SET);
 			i = 5;
 			do {
-				result += fread(StationdisupParBuf,sizeof(unsigned char),mkLengthUp-result,ParaFile);
+				result += fread(StationdisupParBuf+result,sizeof(unsigned char),mkLengthUp-result,ParaFile);
 				i--;
+				if(feof(ParaFile)) break;
 			}while(i && (result != mkLengthUp));
 			//memcpy(StationdisupParBuf+i*512,buffer,512);
 		}
@@ -2751,8 +2752,9 @@ void CardLanFile (unsigned char RW_Type)
 			i = 5;
 			result = 0;
 			do {
-				result += fread(StationdisdownParBuf,sizeof(unsigned char),mkLengthDown-result,ParaFile);
+				result += fread(StationdisdownParBuf+result,sizeof(unsigned char),mkLengthDown-result,ParaFile);
 				i--;
+				if(feof(ParaFile)) break;
 			}while(i && (result != mkLengthDown));
 		}
 		fclose(ParaFile);
@@ -3582,7 +3584,71 @@ unsigned char InitSystem(void)
 		exit(-1);
 	}
 
+	Filebuf = fopen(SECTION_KM_PATH_NAME,"a+");
 
+	if(Filebuf)
+	{
+		printf("open /mnt/record/M3 ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/M3\n");
+        ShowMessage(0,56,16,"加载公里数文件失败");
+		exit(-1);
+	}
+
+	Filebuf = fopen(PARM_FILE_PATH,"a+");
+
+	if(Filebuf)
+	{
+		printf("open /mnt/record/M4 ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/M4\n");
+        ShowMessage(0,56,16,"加载站点信息文件失败");
+		exit(-1);
+	}
+	
+	Filebuf = fopen("/mnt/record/M5","a+");
+
+	if(Filebuf)
+	{
+		printf("open /mnt/record/M5 ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/M5\n");
+        ShowMessage(0,56,16,"加载卡类信息文件失败");
+		exit(-1);
+	}
+
+	Filebuf = fopen("/mnt/record/MP","a+");
+
+	if(Filebuf)
+	{
+		printf("open /mnt/record/MP ok!\n");
+		fclose(Filebuf);
+	}
+	else
+	{
+		close(bp_fd);
+		close(mf_fd);
+		printf("Can't open /mnt/record/MP\n");
+        ShowMessage(0,56,16,"加载设备信息文件失败");
+		exit(-1);
+	}
+	
+	
     ShowMessage(0,56,16,"加载设备运行文件成功");
     
     g_FgFileOccurError = 0;
