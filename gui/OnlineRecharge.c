@@ -4910,7 +4910,7 @@ CRC8 = 0xb8 10111000 (0x1b8 110111000)
 unsigned char CalCRC(unsigned char *ptr, unsigned char len)
 {
     unsigned char i; 
-    unsigned char crc=0x00； /* 计算的初始crc值 */ 
+    unsigned char crc=0x00; /* 计算的初始crc值 */ 
 
     while(len--)
     {
@@ -4933,6 +4933,8 @@ int RetCtrlCmdStatus(char *cmd)
 	memset(sendbuf, 0, sizeof(sendbuf));
 	
 	if (!memcmp(cmd, CMD_FUNC_REQ, 2))
+		{
+		}
 }
 	
 
@@ -4975,7 +4977,7 @@ void CheckUARTPacket_beijing(char ch)
 		return;
     }
    memset(cmdstr, 0, sizeof(cmdstr));
-   memcpy(cmdstr, UARTPacket+3, 2)
+   memcpy(cmdstr, UARTPacket+3, 2);
    if (!memcmp(cmdstr, CMD_FUNC_REQ, 2))
    {
 

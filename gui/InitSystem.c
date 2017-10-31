@@ -19,6 +19,7 @@
 #include "../update/Resumedownload.h"
 #include "cpucard.h"
 #include "savesql.h"
+#include "../net/client.h"
 
 #define Initprintf 1
 
@@ -2605,7 +2606,7 @@ void CardLanFile (unsigned char RW_Type)
 	unsigned char buffer[512];
 	unsigned int mkLengthUp, mkLengthDown;
 
-	unsigned char i,j;
+	unsigned char j,i;
 	int max,maxci,ci;
     ShortUnon tmp;
 
@@ -2631,7 +2632,7 @@ void CardLanFile (unsigned char RW_Type)
 			}
 			fclose(ParaFile);
 		}		
-		#else
+		
 		ParaFile = fopen(PARM_FILE_PATH,"rb+");
 		if (NULL != ParaFile)
 		{
@@ -2648,21 +2649,18 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParBuf != NULL)
 		{
-
-            tmp.i = 0;
-			memcpy(tmp.intbuf,filem4.uprecordnun,2);
+           
 			ParaFile = fopen("/mnt/record/M4","rb+");
-            max = filem4.uprecord;                         //需要修改根据票价参数定义个数
-	        maxci = tmp.i/2;
+            max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
 	        ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
 	        for(i=0;i<max;i++) {
 	            for(j=0;j<=i;j++){
 	                result = fseek(ParaFile, 6, SEEK_SET);
 	                result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
-	                ci++;
-	                if(ci>=maxci)
-	                    break;
+	              //  ci++;
+	              //  if(ci>=maxci)
+	              //      break;
 	            }
 	         }  
 			
@@ -2676,20 +2674,25 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParUpBuf = NULL;
 		SectionParUpBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParUpBuf != NULL)
-		{
-            #ifdef SAVE_CONSUM_DATA_DIRECT
-			ParaFile = fopen("/mnt/record/sectionup.sys","rb+");
-            #else
-            ParaFile = fopen("/var/run/sectionup.sys","rb+");
-            #endif
-			for(i = 0; i<32; i++)
-			{
-				memset(buffer,0,sizeof(buffer));
-				result = fseek(ParaFile, i*512, SEEK_SET);
-				result = fread(buffer,sizeof(unsigned char),512,ParaFile);
-				memcpy(SectionParUpBuf+i*512,buffer,512);
-			}
+		{       
+			
+			ParaFile = fopen("/mnt/record/M4","rb+");
+			max = filem4.downrecordnum.i*filem4.downrecordnum.i;				   //需要修改根据票价参数定义个数
+			ci = 0;
+			ParaFile = fopen("/mnt/record/M4","rb+");
+			for(i=0;i<max;i++) {
+				for(j=0;j<=i;j++){
+					result = fseek(ParaFile, 6, SEEK_SET);
+					result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
+				//	ci++;
+				//	if(ci>=maxci)
+				//		break;
+				}
+			 }	
 			fclose(ParaFile);
+
+
+			
 		}
 		break;
 
@@ -2853,7 +2856,9 @@ void WriteSationDis_Para(unsigned char type,unsigned char *dat,unsigned int len)
     
  }
 
-void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,int offset)
+
+void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,unsigned int offset)
+
 {
     int result;
     int i,j,ci,maxci,max;
@@ -2908,8 +2913,11 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,in
 		fclose(ParaFile);	
 
 		*/
+		
 		ParaFile = fopen("/mnt/record/M4","rb+");
 		result = fseek(ParaFile, offset, SEEK_SET);
+		result = fwrite(dat,sizeof(unsigned char),len,ParaFile);
+			
 
         CardLanFile(SectionParup);
 		break;	      
@@ -2932,9 +2940,8 @@ void ReadandWriteBasicRateFile(unsigned char type)
     switch(type)
     {
         case 0:
-
              basicrate = fopen("/mnt/record/MP","rb+");
-		     memcpy(filemp.linenum,flc0005.glinenum,2);
+		     	memcpy(filemp.linenum,flc0005.glinenum,2);
 			 filemp.lineattr = flc0005.glineattr;
 			 memcpy(filemp.defaultbaseprice.intbuf,flc0005.gbasicpice,2);
 			 filemp.modebj = flc0005.glocalnodefinecard;
@@ -2958,11 +2965,11 @@ void ReadandWriteBasicRateFile(unsigned char type)
 
         case 1:
              basicrate = fopen("/mnt/record/MP","rb+");
-			 memcpy(&filemp,0,sizeof(struct FileMP));
+	      memcpy(&filemp.linenum[0],0,sizeof( FileMP));
              result = fseek(basicrate, 0, SEEK_SET);
-             result = fread(&filemp,sizeof(unsigned char),127,basicrate);
+             result = fread(&filemp.linenum[0],sizeof(unsigned char),127,basicrate);
              fclose(basicrate);
-			 DBG_PRINTF("费率卡二次信息文件:");
+			 DBG_PRINTF("费率卡二次信息文件MP:");
 			 menu_print(filemp.linenum,127);			 
 			 Section.SationNum[0] = filemp.uppricesitemnum.i;			 
 			 Sectionup.SationNum[0] = filemp.downpricesitemnum.i;             
@@ -3293,7 +3300,40 @@ void ShowMessage(int x ,int y,int font,char *out)
 	usleep(500000);
 }
 
+int update_file_content(int index)
+{
 
+	switch(index)
+	{
+		case 0:						//G1
+					break;
+		case 1:						//G4
+					break;
+		case 2:						//M2
+					break;
+		case 3:						//M3
+					break;
+		case 4:						//G10
+					break;
+		case 5:						//G6
+					break;
+		case 6:						//G7
+					break;
+		case 7:						//M4
+					break;
+		case 8:						//M5
+					break;
+		case 9:						//Mp
+					break;
+		case 10:						//W1
+					break;
+		default : 
+			return -1;
+		
+	}
+
+	return 0;
+}
 
 // added by taeguk calculate CRC16
 extern void Calc_UpdateCrc(void);
@@ -3596,13 +3636,18 @@ unsigned char InitSystem(void)
 
 
     
-
+    if(init_version_indexfile())
+    	{	
+    		printf(" fatl erro: can not find %s \n",FILE_INDEX_PATH);
+    		exit(0);
+    	}
 
     Card_SysInit();   
+	
     ReadandWriteBasicRateFile(1);               //初始化MP文件
-	InitBlackListBuff();                        //系统初始化黑名单
+    InitBlackListBuff();                        //系统初始化黑名单
     InitWhiteListBuff();                        //系统初始化白名单    
-	InitYangZhouCard();							// 初始化地方定义
+    InitYangZhouCard();							// 初始化地方定义
 
 	
 
@@ -3614,12 +3659,12 @@ unsigned char InitSystem(void)
 #endif   
 
 	//Read_Parameter();							//消费参数读取
-	//CardLanFile(SectionPar);                    //上行分段参数读取
-	//CardLanFile(SationdisupParup);              //上行公里数读取      
+	CardLanFile(SectionPar);                    //上行分段参数读取
+	CardLanFile(SationdisupParup);              //上行公里数读取      
 	if(Section.Enableup == 0x55)
 	{
-		//CardLanFile(SectionParup);              //下行参数读取
-		//CardLanFile(SationdisdownPardown);      //下行公里数读取 
+		CardLanFile(SectionParup);              //下行参数读取
+		CardLanFile(SationdisdownPardown);      //下行公里数读取 
 	}
 	printf("in inisystem the sectionum :%d\n",SectionNum);
 	

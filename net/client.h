@@ -47,7 +47,7 @@
 #define CLIENT_VER "CL-2017.10.10-10:32"
 
 #define MAX_TRANSFER  4096
-
+#define FILE_SUPPORT_MAX 	11
 
 /*	发送类消息定义数据包各个固定字段的长度 */
 #define SYN_INFO_LEN	2
@@ -69,17 +69,17 @@
 
 typedef struct device_info_{
 	unsigned char posid[4];		//bcd 设备id
-	unsigned char Ver;			//hex 版本
+	unsigned char Ver;				//hex 版本
 
 	unsigned char FirVer[2];		//  bcd  : 固件版本
 	unsigned char TerParVer[2];				// -		  	
 	unsigned char Line[2];						//		 线路	
-	unsigned char  BlkParVer[4];					//		 黑名单参数版本	
-	unsigned char CatpParVer[4];					// -		 可用卡类型参数版本
+	unsigned char  BlkParVer[4];				//		 黑名单参数版本	
+	unsigned char CatpParVer[4];				// -		 可用卡类型参数版本
 	unsigned char MchCode[2];					// -		 商户简码		
-	unsigned char SamID[6];			// - bcd   SAM卡号
-	unsigned char LinVer[2];		// 	bcd	 线路站点信息版本
-	unsigned char InCarBlkParVer[4];				//		 实体卡增量黑名单版本
+	unsigned char SamID[6];					// - bcd   SAM卡号
+	unsigned char LinVer[2];					// 	bcd	 线路站点信息版本
+	unsigned char InCarBlkParVer[4];			//		 实体卡增量黑名单版本
 	unsigned char QRBlkVer[4];					// -		二维码黑名单版本
 	unsigned char InQRBlkParVer[4];				//		二维码增量黑名单版本
 	unsigned char HTBlkParVer[4];				//		互通黑名单版本
@@ -413,6 +413,22 @@ typedef struct send_file_back_{
 	
 
 
+/*
+	文件索引，存储各个文件的基本信息
+	
+*/
+
+#define FILE_INDEX_PATH "/mnt/record/versindex.bin"
+
+typedef struct indexitem_{
+	int filesz;
+	unsigned char crc[2];
+	unsigned char ver[4];
+}indexitem;
+
+
+
+
 
 void * main_client_thread(void * args);
 void * pppd_connect_thread(void * argv);		//拨号线程
@@ -451,5 +467,14 @@ int set_server_ip(char * svip, int iplen, int svport);
 int is_net_connect(void);
 
 int is_server_connect(void);
+
+
+int init_version_indexfile();
+
+
+
+/*来自外部的其他函数*/
+
+extern int update_file_content(int index);
 #endif
 
