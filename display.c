@@ -935,6 +935,8 @@ int main(int argc,const char** argv)
    	 //pthread_create ( &ph, &attr, sendGps_Pthread,"AVBC");
 
 	pthread_create ( &pf, &attr, TimerTask, "AVBC");  
+	pthread_create(&ph ,&attr,pppd_connect_thread,"AVBC");	
+	pthread_create(&pb,&attr,main_client_thread,"AVBC");	
 	//pthread_create ( &pb, &attr, ReadGprs_Pthread, "AVBC");		//GPRS读取数据
 	//pthread_create ( &pd, &attr, Readsql_Pthread, "AVBC");		//自动上传数据
 #ifdef SUPPORT_QR_CODE

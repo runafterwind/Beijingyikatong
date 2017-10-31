@@ -47,6 +47,53 @@ enum NET_ERROCODE{
 };
 
 
+indexitem  platFileInfo[FILE_SUPPORT_MAX]={0};
+
+int init_version_indexfile()
+{
+	int fd;
+	indexitem tmpitem;
+	int i;
+	int ret;
+	
+	if(access(FILE_INDEX_PATH,0)!=0)
+		{
+			fd=open(FILE_INDEX_PATH,O_RDWR|O_CREAT);
+			if(fd<0)
+				{
+					printf("in func %s ,open %s failed \n",__func__,FILE_INDEX_PATH);
+					return -1;
+				}
+			
+			for(i=0;i<FILE_SUPPORT_MAX;i++)
+				{
+					write(fd,&platFileInfo[i],sizeof(indexitem));
+				}
+			close(fd);
+			return 0;
+		}
+
+	else{
+		fd=open(FILE_INDEX_PATH,O_RDWR);
+		if(fd<0)
+		{
+			printf("in func %s ,open %s failed \n",__func__,FILE_INDEX_PATH);
+			return -1;
+		}
+
+		for(i=0;i<FILE_SUPPORT_MAX;i++)
+		{
+			ret=read(fd,&tmpitem,sizeof(indexitem));
+			memcpy(&platFileInfo[i],&tmpitem,sizeof(indexitem));
+		}
+		close(fd);
+	}
+
+	return 0;
+}
+
+
+
 
 
 
@@ -1863,7 +1910,7 @@ int request_Mchn_back_process(mission_list * mission,char * framdata,int framesz
 
 /**************************请求文件描述信息部分*******************************/
 
-#define FILE_SUPPORT_MAX 	11
+
 
 downfileprocess dwnFilPro[FILE_SUPPORT_MAX]={
 		{.keyword=FIL1_BLACK},
@@ -1880,6 +1927,7 @@ downfileprocess dwnFilPro[FILE_SUPPORT_MAX]={
 };
 
 
+#define DEST_PATH  "/mnt/record/"				//文件目录
 int init_dwonfie_process(file_desinfo_back * backinfo)
 {
 	LongUnon longdata;
@@ -1901,10 +1949,10 @@ int init_dwonfie_process(file_desinfo_back * backinfo)
 					//sprintf(dwnFilPro[i].tmpname,"/mnt/record/%s.tmp",dwnFilPro[i].keyword+3);
 					//sprintf(dwnFilPro[i].destname,"/mnt/record/%s.%d",dwnFilPro[i].keyword+3,dwnFilPro[i].ver);
 					
-					sprintf(dwnFilPro[i].tmpname,"./record/%s.tmp",dwnFilPro[i].keyword+3);
+					sprintf(dwnFilPro[i].tmpname,"%s%s.tmp",DEST_PATH,dwnFilPro[i].keyword+3);
 					memcpy(dwnFilPro[i].ver,backinfo->version,4);	
 					//sprintf(dwnFilPro[i].destname,"./record/%s.%02x%02x",dwnFilPro[i].keyword+3,dwnFilPro[i].ver[0],dwnFilPro[i].ver[1]);
-					sprintf(dwnFilPro[i].destname,"./record/%s",dwnFilPro[i].keyword+3);
+					sprintf(dwnFilPro[i].destname,"%s%s",DEST_PATH,dwnFilPro[i].keyword+3);
 
 					
 					
@@ -2266,7 +2314,36 @@ int create_dwonload_file_mission(mission_info * out)
 
 }
 
+int update_version_index_file(int pos)
+{
+	if(pos<0||pos>10)
+		{
+			printf(" in func %s ,invalid index \n",__func__);
+			return -1;
+		}
 
+	int fd;
+	int offset;
+	indexitem tmpitem;
+	fd=open(FILE_INDEX_PATH,O_RDWR);
+	if(fd<0)
+		{
+			printf("in func %s ,can not open %s \n",__func__,FILE_INDEX_PATH);
+			return -1;
+		}
+
+	tmpitem.filesz=dwnFilPro[pos].destlen;
+	tmpitem.crc[0]=dwnFilPro[pos].filecrc[0];
+	tmpitem.crc[1]=dwnFilPro[pos].filecrc[1];
+	memcpy(tmpitem.ver,dwnFilPro[pos].ver,4);
+
+	offset=sizeof(indexitem)*pos;
+	lseek(fd,offset,SEEK_SET);
+	write(fd,&tmpitem,sizeof(indexitem));
+	close(fd);
+	return 0;
+
+}
 
 int down_file_back_process(mission_list * mission,char * framdata,int framesz,int *index)
 {
@@ -2471,10 +2548,13 @@ int verify_download_file(int index , char *out)
 	out[1]=crc[1];
 
 	/*追加版本号到文件末尾*/	
+#if 0	
 	fd=open(dwnFilPro[index].tmpname,O_RDWR);
 	lseek(fd,0,SEEK_END);
 	write(fd,dwnFilPro[index].ver,2);
 	close(fd);
+#endif
+
 	netDebugPrintf("-- in func %s ,verify file success \n",__func__);
 	return 0;
 }
@@ -3178,6 +3258,9 @@ int client_react_server()
 										system(cmd);
 										system("sync");
 										printf("------------ dwon load file success---\n");
+										/*更新索引文件*/
+										update_version_index_file( pos);
+										update_file_content(pos);
 									#endif
 									}
 									

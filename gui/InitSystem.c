@@ -19,6 +19,7 @@
 #include "../update/Resumedownload.h"
 #include "cpucard.h"
 #include "savesql.h"
+#include "../net/client.h"
 
 #define Initprintf 1
 
@@ -2603,10 +2604,9 @@ void CardLanFile (unsigned char RW_Type)
 	FILE *ParaFile;
 	int result;
 	unsigned char buffer[512];
-	unsigned char i;
 	unsigned int mkLengthUp, mkLengthDown;
 
-	unsigned char j; 
+	unsigned char j,i;
 	int max,maxci,ci;
     ShortUnon tmp;
 
@@ -2901,7 +2901,9 @@ void WriteSationDis_Para(unsigned char type,unsigned char *dat,unsigned int len)
     
  }
 
+
 void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,unsigned int offset)
+
 {
     int result;
     int i,j,ci,maxci,max;
@@ -2985,7 +2987,7 @@ void ReadandWriteBasicRateFile(unsigned char type)
     {
         case 0:
              basicrate = fopen("/mnt/record/MP","rb+");
-		     memcpy(filemp.linenum,flc0005.glinenum,2);
+		     	memcpy(filemp.linenum,flc0005.glinenum,2);
 			 filemp.lineattr = flc0005.glineattr;
 			 memcpy(filemp.defaultbaseprice.intbuf,flc0005.gbasicpice,2);
 			 filemp.modebj = flc0005.glocalnodefinecard;
@@ -3009,7 +3011,7 @@ void ReadandWriteBasicRateFile(unsigned char type)
 
         case 1:
              basicrate = fopen("/mnt/record/MP","rb+");
-			 memcpy(&filemp.linenum[0],0,sizeof( FileMP));
+	      memcpy(&filemp.linenum[0],0,sizeof( FileMP));
              result = fseek(basicrate, 0, SEEK_SET);
              result = fread(&filemp.linenum[0],sizeof(unsigned char),127,basicrate);
              fclose(basicrate);
@@ -3344,7 +3346,49 @@ void ShowMessage(int x ,int y,int font,char *out)
 	usleep(500000);
 }
 
+int update_file_content(int index)
+{
 
+	switch(index)
+	{
+		case 0:						//G1
+					break;
+		case 1:						//G4
+					break;
+		case 2:						//M2
+					break;
+		case 3:						//M3
+			CardLanFile(SationdisupParup);
+			CardLanFile(SationdisdownPardown);
+					break;
+		case 4:						//G10
+					break;
+		case 5:						//G6
+					break;
+		case 6:						//G7
+					break;
+		case 7:						//M4
+			CardLanFile(SectionPar);
+			CardLanFile(SectionParup);
+		
+					break;
+		case 8:						//M5
+			CardLanFile(LOCALCARDRATE);
+			CardLanFile(REMOTECARDRATE);
+		
+					break;
+		case 9:						//Mp
+			ReadandWriteBasicRateFile(1);
+					break;
+		case 10:						//W1
+					break;
+		default : 
+			return -1;
+		
+	}
+
+	return 0;
+}
 
 // added by taeguk calculate CRC16
 extern void Calc_UpdateCrc(void);
@@ -3642,13 +3686,18 @@ unsigned char InitSystem(void)
 
 
     
-
+    if(init_version_indexfile())
+    	{	
+    		printf(" fatl erro: can not find %s \n",FILE_INDEX_PATH);
+    		exit(0);
+    	}
 
     Card_SysInit();   
+	
     ReadandWriteBasicRateFile(1);               //初始化MP文件
-	InitBlackListBuff();                        //系统初始化黑名单
+    InitBlackListBuff();                        //系统初始化黑名单
     InitWhiteListBuff();                        //系统初始化白名单    
-	InitYangZhouCard();							// 初始化地方定义
+    InitYangZhouCard();							// 初始化地方定义
 
 	
 
@@ -3660,14 +3709,18 @@ unsigned char InitSystem(void)
 #endif   
 
 	//Read_Parameter();							//消费参数读取
-	CardLanFile(SectionPar);                    //上行分段参数读取
-	CardLanFile(SationdisupParup);              //上行公里数读取      
+	CardLanFile(SectionPar);                    //上行分段参数读取M4
+	CardLanFile(SationdisupParup);              //上行公里数读取     M3 
 	if(Section.Enableup == 0x55)
 	{
-		CardLanFile(SectionParup);              //下行参数读取
-		CardLanFile(SationdisdownPardown);      //下行公里数读取 
+		CardLanFile(SectionParup);              //下行参数读取		M4
+		CardLanFile(SationdisdownPardown);      //下行公里数读取 	M3
 	}
 	printf("in inisystem the sectionum :%d\n",SectionNum);
+	CardLanFile(LOCALCARDRATE);					//本地卡M5		
+	CardLanFile(REMOTECARDRATE);				//异地卡M5
+
+
 	
 	FindSavedata();	
 	// added by taeguk calculate CRC16

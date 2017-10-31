@@ -85,10 +85,11 @@ FileMP filemp;
 
 FileM5_R CardConParam_remotcard[CARD_NUMBER];
 
-CardRate_local localcard[13];
+CardRate_local localcard[CARD_NUMBER];
 
-CardRate_remot remotcard[13];
 
+unsigned char cardmapaddr;					//当前卡片在卡类中的地址
+unsigned char cardmaprate;                  //当前卡片执行的拆率方式
 
 /***外变量定义***/
 extern unsigned char PsamNum_bak1[6];
@@ -4684,7 +4685,7 @@ unsigned char TopUpCardInfor_CPU(int type)
 
 
 
-int FindCardTypeAmount(unsigned char logictype, unsigned short balance, unsigned short time_inter, unsigned char *beepmode)
+int FindCardTypeAmount1(unsigned char logictype, unsigned short balance, unsigned short time_inter, unsigned char *beepmode)
 {
 	int i;
 	unsigned char mode;
@@ -4983,7 +4984,7 @@ unsigned char ReadCardInfor_CPU(void)
             break;
 
         case 5://判定可用卡类型参数
-             status  = SupportType_Cpu_zhujian(CardLanCPU.zcardtype);    //待根据卡类型参数列表查询
+             status  = SupportType_Cpu_zhujian(CardLanCPU.zcardtype,&cardmapaddr,&CardLan.CardType,&cardmaprate);    //待根据卡类型参数列表查询
 			if(status == MI_OK)
 				t++;
 			else

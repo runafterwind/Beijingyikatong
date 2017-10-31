@@ -305,6 +305,7 @@ typedef struct {
 
 extern FileM5 filem5;
 
+
 /*
 m5 文件本地卡
 */
@@ -342,6 +343,8 @@ typedef struct {
 
 }FileM5_R;
 extern FileM5_R CardConParam_remotcard[CARD_NUMBER];
+
+
 
 //下载的MP费率卡二次发行信息文件
 typedef struct{
