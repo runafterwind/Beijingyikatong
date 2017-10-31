@@ -159,7 +159,11 @@
 #define     BASICRATE_FILE_PATH          "/mnt/record/basicrate.sys"
 #define		SAVE_CONSUM_DATA_DIRECT
 
-#define   SECTION_KM_PATH_NAME	 "/mnt/record/M3"
+#define     SECTION_KM_PATH_NAME	     "/mnt/record/M3"
+#define     CARDRATE_PATH_NAME	 		 "/mnt/record/M5"
+
+
+
 //每2个站点之间的公里数所占的文件大小
 #define   SECTION_POINT_SIZE		22
 

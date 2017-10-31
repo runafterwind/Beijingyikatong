@@ -78,6 +78,7 @@ FLC0007 flc0007;
 FLC0008 flc0008;
 FLC0009 flc0009;
 
+FileM3 filem3;
 FileM4 filem4;
 FileM5 filem5;
 FileMP filemp;
@@ -5920,7 +5921,7 @@ unsigned char ReadCardInfor_CPU(void)
                     menu_print(buff3, receive_buf[0]);       
                     tmp.i = 0;
                     memcpy(tmp.intbuf,receive_buf+1,2);
-
+					filem4.uprecordnum.i = tmp.i;
                     WriteSection_Para(0, buff3+3,tmp.i,0);
 
                     t++;
@@ -5955,7 +5956,7 @@ unsigned char ReadCardInfor_CPU(void)
 
 					//tmp1.i = 0;
 					//memcpy(tmp1.intbuf,filem4.downrecordnum,2);
-                    WriteSection_Para(1, buff3+3,tmp.i,filem4.downrecordnum.i);
+                    WriteSection_Para(1, buff3+3,tmp.i,filem4.uprecordnum.i);
 
                     t++;
                     }

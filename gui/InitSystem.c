@@ -2654,9 +2654,9 @@ void CardLanFile (unsigned char RW_Type)
             max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
 	        ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
+			result = fseek(ParaFile, 6, SEEK_SET);
 	        for(i=0;i<max;i++) {
-	            for(j=0;j<=i;j++){
-	                result = fseek(ParaFile, 6, SEEK_SET);
+	            for(j=0;j<=i;j++){	               
 	                result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
 	              //  ci++;
 	              //  if(ci>=maxci)
@@ -2680,15 +2680,17 @@ void CardLanFile (unsigned char RW_Type)
 			max = filem4.downrecordnum.i*filem4.downrecordnum.i;				   //需要修改根据票价参数定义个数
 			ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
+			result = fseek(ParaFile, 6+filem4.uprecordnum.i*2, SEEK_SET);
 			for(i=0;i<max;i++) {
 				for(j=0;j<=i;j++){
-					result = fseek(ParaFile, 6, SEEK_SET);
+					
 					result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
 				//	ci++;
 				//	if(ci>=maxci)
 				//		break;
 				}
 			 }	
+			
 			fclose(ParaFile);
 
 
@@ -2754,12 +2756,43 @@ void CardLanFile (unsigned char RW_Type)
 				result += fread(StationdisdownParBuf,sizeof(unsigned char),mkLengthDown-result,ParaFile);
 				i--;
 			}while(i && (result != mkLengthDown));
+			
 		}
 		fclose(ParaFile);
 		
 		break;
+		
+    case LOCALCARDRATE:
+		ParaFile = fopen(CARDRATE_PATH_NAME,"rb+");
+		if (NULL == ParaFile) break;
+		memset(buffer,0,sizeof(buffer));
+		result = fseek(ParaFile, 0, SEEK_SET);
+		result = fread(buffer,sizeof(unsigned char),6,ParaFile);
+		memcpy(filem5.localratenum.intbuf,buffer+1,2);
+		memcpy(filem5.remotratenum.intbuf,buffer+4,2);
+		result = fseek(ParaFile, 6, SEEK_SET);
+		result = fread(buffer,sizeof(unsigned char),filem5.localratenum.i*20,ParaFile);
+		for(i=0;i<filem5.localratenum.i;i++)
+			{
+			 memcpy(&CardConParam[i].phycardtype,buffer+20*i,20);
+			}
+		fclose(ParaFile);
+		break;
 
+    case REMOTECARDRATE:
+		ParaFile = fopen(CARDRATE_PATH_NAME,"rb+");
+		if (NULL == ParaFile) break;
+		memset(buffer,0,sizeof(buffer));		
+		result = fseek(ParaFile, 6+filem5.localratenum.i*20, SEEK_SET);
+		result = fread(buffer,sizeof(unsigned char),filem5.remotratenum.i*26,ParaFile);
+		for(i=0;i<filem5.remotratenum.i;i++)
+			{
+			 memcpy(&CardConParam_remotcard[i].cardissuerlabel,buffer+26*i,26);
+			}
+		
+		fclose(ParaFile);
 
+		break;
 
 
 
@@ -2886,6 +2919,7 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,un
 		ParaFile = fopen("/mnt/record/M4","rb+");
 		result = fseek(ParaFile, offset, SEEK_SET);
 	    result = fwrite(dat,sizeof(unsigned char),len,ParaFile);
+		fclose(ParaFile);	
 
         CardLanFile(SectionPar);
 		break;
@@ -2915,7 +2949,7 @@ void WriteSection_Para(unsigned char type,unsigned char *dat,unsigned int len,un
 		ParaFile = fopen("/mnt/record/M4","rb+");
 		result = fseek(ParaFile, offset, SEEK_SET);
 		result = fwrite(dat,sizeof(unsigned char),len,ParaFile);
-			
+		fclose(ParaFile);		
 
         CardLanFile(SectionParup);
 		break;	      
