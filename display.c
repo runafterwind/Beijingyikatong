@@ -1044,8 +1044,10 @@ int main(int argc,const char** argv)
         			MoneyValue(temp+5,filemp.defaultbaseprice.i);
         			TextOut(0,70,temp);
                  #endif
-				
+				#if 0
 				GetSectionKMFromPara(0,Section.Sationdis);
+				#endif
+				
                 #ifdef NEW0409
                   TextOut(0,210, "ÇëË¢¿¨"); 
                 #else

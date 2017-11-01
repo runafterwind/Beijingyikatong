@@ -2649,9 +2649,13 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParBuf != NULL)
 		{
-           
-			ParaFile = fopen("/mnt/record/M4","rb+");
-            max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
+			if(platFileInfo[7].isexist==0)
+				{
+					printf(" in func %s ,can not find /mnt/record/M4 \n",__func__);
+					return ;
+				}
+		 ParaFile = fopen("/mnt/record/M4","rb+");
+           	 max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
 	        ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
 	        for(i=0;i<max;i++) {
@@ -2675,7 +2679,11 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParUpBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParUpBuf != NULL)
 		{       
-			
+			if(platFileInfo[7].isexist==0)
+				{
+					printf(" in func %s ,can not find /mnt/record/M4 \n",__func__);
+					return ;
+				}
 			ParaFile = fopen("/mnt/record/M4","rb+");
 			max = filem4.downrecordnum.i*filem4.downrecordnum.i;				   //需要修改根据票价参数定义个数
 			ci = 0;
@@ -2701,7 +2709,8 @@ void CardLanFile (unsigned char RW_Type)
 		StationdisupParBuf = NULL;
 		//ParaFile = fopen("/mnt/record/sationdisup.sys","rb+");
 		ParaFile = fopen(SECTION_KM_PATH_NAME,"rb+");
-		if (NULL == ParaFile) break;
+		if (NULL == ParaFile) 
+			break;
 		memset(buffer,0,sizeof(buffer));
 		result = fread(buffer,sizeof(unsigned char),2,ParaFile);
 		mkLengthUp = buffer[0]*buffer[1];
@@ -2713,7 +2722,7 @@ void CardLanFile (unsigned char RW_Type)
 		StationdisupParBuf = (unsigned char *)malloc(mkLengthUp);
 		if(StationdisupParBuf != NULL)
 		{
-
+			
 			//memset(buffer,0,sizeof(buffer));
 			result = fseek(ParaFile, 4, SEEK_SET);
 			i = 5;
@@ -2732,7 +2741,8 @@ void CardLanFile (unsigned char RW_Type)
 		StationdisdownParBuf = NULL;
 		//ParaFile = fopen("/mnt/record/sationdisup.sys","rb+");
 		ParaFile = fopen(SECTION_KM_PATH_NAME,"rb+");
-		if (NULL == ParaFile) break;
+		if (NULL == ParaFile)
+			break;
 		memset(buffer,0,sizeof(buffer));
 		result = fread(buffer,sizeof(unsigned char),4,ParaFile);
 		mkLengthUp = buffer[0]*buffer[1];
@@ -2939,6 +2949,11 @@ void ReadandWriteBasicRateFile(unsigned char type)
     int result;
     FILE *basicrate;
 
+	if(platFileInfo[9].isexist==0)
+		{
+		printf(" in func %s ,can not find /mnt/record/MP \n");
+		return ;
+		}
     switch(type)
     {
         case 0:
@@ -3384,9 +3399,9 @@ unsigned char InitSystem(void)
 	{
 		system("mv /mnt/nand1-2/app/RecordErrorFile.txt /mnt/record/");
 	}  
-    system("sync;");
+    	system("sync;");
 
-    SetColor(Mcolor);
+    	SetColor(Mcolor);
 	ShowMessage(0,5,16,"设备初始化...");
 
 
@@ -3709,12 +3724,12 @@ unsigned char InitSystem(void)
     	}
 
     Card_SysInit();   
-	
+#if 1
     ReadandWriteBasicRateFile(1);               //初始化MP文件
     InitBlackListBuff();                        //系统初始化黑名单
     InitWhiteListBuff();                        //系统初始化白名单    
     InitYangZhouCard();							// 初始化地方定义
-
+#endif
 	
 
 
@@ -3724,7 +3739,8 @@ unsigned char InitSystem(void)
     ReadMERCHANTNO();//读取商户号文件
 #endif   
 
-	//Read_Parameter();							//消费参数读取
+#if 1
+	//Read_Parameter();				//消费参数读取
 	CardLanFile(SectionPar);                    //上行分段参数读取
 	CardLanFile(SationdisupParup);              //上行公里数读取      
 	if(Section.Enableup == 0x55)
@@ -3733,7 +3749,7 @@ unsigned char InitSystem(void)
 		CardLanFile(SationdisdownPardown);      //下行公里数读取 
 	}
 	printf("in inisystem the sectionum :%d\n",SectionNum);
-	
+#endif	
 	FindSavedata();	
 	// added by taeguk calculate CRC16
 	//Calc_UpdateCrc();	        

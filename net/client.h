@@ -254,7 +254,21 @@ typedef struct request_Merchant_back_info_{
 #define FIL8_PRICE				"1:/M4"
 #define FIL9_MILS_PARA			"1:/M5"
 #define FIL10_TWO_RELE_PARA		"1:/MP"
-#define	FIL11_HT_WHITE			"1:/W1"
+#define FIL11_HT_WHITE			"1:/W1"
+
+/* 目标文件路径*/
+#define DEST_FIL1	"/mnt/record/G1"
+#define DEST_FIL2	"/mnt/record/G4"
+#define DEST_FIL3	"/mnt/record/M2"
+#define DEST_FIL4	"/mnt/reocrd/M3"
+#define DEST_FIL5	"/mnt/record/G10"
+#define DEST_FIL6	"/mnt/record/G6"
+#define DEST_FIL7	"/mnt/record/G7"
+#define DEST_FIL8	"/mnt/record/M4"
+#define DEST_FIL9      "/mnt/record/M5"
+#define DEST_FIL10    "/mnt/record/MP"
+#define DEST_FIL11	"/mnt/record/W1"
+
 
 /* M3 文件结构 */
 typedef struct M3_head_{
@@ -422,13 +436,15 @@ typedef struct send_file_back_{
 
 typedef struct indexitem_{
 	int filesz;
+	unsigned char name[64];
 	unsigned char crc[2];
 	unsigned char ver[4];
+	unsigned char isexist;		// 1存在，0不存在
 }indexitem;
 
 
 
-
+extern indexitem platFileInfo[FILE_SUPPORT_MAX];
 
 void * main_client_thread(void * args);
 void * pppd_connect_thread(void * argv);		//拨号线程

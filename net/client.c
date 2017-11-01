@@ -47,7 +47,21 @@ enum NET_ERROCODE{
 };
 
 
-indexitem  platFileInfo[FILE_SUPPORT_MAX]={0};
+
+indexitem  platFileInfo[FILE_SUPPORT_MAX]={
+{.name=DEST_FIL1},
+{.name=DEST_FIL2},
+{.name=DEST_FIL3},
+{.name=DEST_FIL4},
+{.name=DEST_FIL5},
+{.name=DEST_FIL6},
+{.name=DEST_FIL7},
+{.name=DEST_FIL8},
+{.name=DEST_FIL9},
+{.name=DEST_FIL10},
+{.name=DEST_FIL11}
+};
+
 
 int init_version_indexfile()
 {
@@ -85,6 +99,10 @@ int init_version_indexfile()
 		{
 			ret=read(fd,&tmpitem,sizeof(indexitem));
 			memcpy(&platFileInfo[i],&tmpitem,sizeof(indexitem));
+			if(access(platFileInfo[i].name,0)!=0){
+					platFileInfo[i].isexist=0;
+					platFileInfo[i].filesz=0;
+			}
 		}
 		close(fd);
 	}
@@ -1010,9 +1028,9 @@ int heart_back_process(mission_list * mission,char * framdata,int framesz)
 				}
 	}
 #else
-		analyse_bitmap(13);		//Mp	
+		//analyse_bitmap(13);		//Mp	
 		//analyse_bitmap(12);		//M5
-		//analyse_bitmap(11);		//M4
+		analyse_bitmap(11);		//M4
 		//analyse_bitmap(3);		//M3
 		//analyse_bitmap(2);		//固件，没通过
 
@@ -1128,7 +1146,7 @@ int create_send_A2_mission(record_info * recinfo,mission_info * out)
 */
 int  analyse_A2_respondcode(char * respond,int reslen)
 {
-
+	
 	
 	return 0;
 }
@@ -1964,7 +1982,8 @@ int init_dwonfie_process(file_desinfo_back * backinfo)
 					}
 					else{
 						printf("--- in func %s , open %s suncces \n",__func__,dwnFilPro[i].tmpname);
-						system(" ls -l ./record");
+						//system(" ls -l ./record");
+						system("ls -l /mnt/record");
 					}
 					close(fd);
 					//sprintf(cmd,"chmod 777 %s ",dwnFilPro[i].tmpname);
@@ -3315,7 +3334,7 @@ void * main_client_thread(void * args)
 	mission_list *tempmission;
 
 
-	printf("------- in func %s -\n",__func__);
+	printf("---------- in func %s ---------\n",__func__);
 
 	signal(SIGPIPE,SIG_IGN);  //关闭SIGPIPE信号，防死机
 	
@@ -3552,7 +3571,8 @@ void * pppd_connect_thread(void * argv)		//拨号线程
 	struct stat file_info;
 	int connecttype=4;	//联网方式
 	int g_EnableCallPPPD =0;
-	
+
+	printf("------------- in func %s ----------\n",__func__);
 	switch(connecttype)
 		{
 			case 4:
@@ -3666,7 +3686,16 @@ PPP_AGAINE:
 }
 
 
+/*
+	自动上传记录线程, 最好是在任务队列为空时在上送
+*/
+static int send_record_flag;		//ready 0; 1 busy; 2 finished; 3 failed
+void * Auto_send(void * argc)
+{
 
+
+
+}
 
 /*test program*/
 #if 0
