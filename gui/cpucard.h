@@ -271,6 +271,18 @@ typedef struct{
 
 extern FLC0009 flc0009;
 
+typedef struct {
+	unsigned char uprecord;				//上行记录长度
+	unsigned char uprecordnum;		//上行记录个数
+	unsigned char downrecord;			//下行记录长度
+	unsigned char downrecordnum;     //下行记录个数
+	unsigned char m3ver[2];             //文件版本
+}FileM3;
+
+extern FileM3 filem3;
+
+
+
 
 typedef struct {
 	unsigned char uprecord;				//上行记录长度
@@ -285,9 +297,9 @@ extern FileM4 filem4;
 
 typedef struct {
 	unsigned char localrate;			//本地折率单个记录长度
-	unsigned char localratenum[2];		//本地折率记录个数
+	ShortUnon localratenum;		//本地折率记录个数
 	unsigned char remotrate;			//互通折率单个记录长度
-	unsigned char remotratenum[2];     //互通记录个数
+	ShortUnon remotratenum;     //互通记录个数
 	unsigned char m5ver[2];             //文件版本
 }FileM5;
 

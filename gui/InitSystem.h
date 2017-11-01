@@ -127,6 +127,8 @@
 #define         SectionParup            (SYSFILE+2)
 #define         SationdisupParup        (SYSFILE+3)
 #define         SationdisdownPardown    (SYSFILE+4)
+#define         LOCALCARDRATE           (SYSFILE+5)
+#define         REMOTECARDRATE          (SYSFILE+6)
 
 
 //################################-----M1¿¨²Ù×÷ÃüÁî-----########################################

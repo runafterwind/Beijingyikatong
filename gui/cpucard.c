@@ -78,16 +78,18 @@ FLC0007 flc0007;
 FLC0008 flc0008;
 FLC0009 flc0009;
 
+FileM3 filem3;
 FileM4 filem4;
 FileM5 filem5;
 FileMP filemp;
 
 FileM5_R CardConParam_remotcard[CARD_NUMBER];
 
-CardRate_local localcard[13];
+CardRate_local localcard[CARD_NUMBER];
 
-CardRate_remot remotcard[13];
 
+unsigned char cardmapaddr;					//当前卡片在卡类中的地址
+unsigned char cardmaprate;                  //当前卡片执行的拆率方式
 
 /***外变量定义***/
 extern unsigned char PsamNum_bak1[6];
@@ -4681,6 +4683,69 @@ unsigned char TopUpCardInfor_CPU(int type)
 	return status;
 }
 
+
+
+int FindCardTypeAmount1(unsigned char logictype, unsigned short balance, unsigned short time_inter, unsigned char *beepmode)
+{
+	int i;
+	unsigned char mode;
+	ShortUnon tmp;
+	
+
+	mode = CardConParam[i].consumemode & 0xf0;
+	if (mode != 1 && mode != 2) {
+		return -2; 	  // 此卡在本线路禁止使用
+	}
+
+	if (balance < CardConParam[i].minblancelimit.i || balance > CardConParam[i].maxblancelimit.i) 
+	{
+		printf("balance is error  bal = %u, limit = %u, max = %u \n", balance, CardConParam[i].minblancelimit.i, CardConParam[i].maxblancelimit.i);
+		return -3;
+	}
+	
+	*beepmode = CardConParam[i].consumemode & 0x0f;
+
+	memcpy(tmp.intbuf, flc0005.gbupiaolimittime, 2);
+	if (time_inter > tmp.i)   // 界外的
+	{
+		HostValue.i = (HostValue.i*CardConParam[i].outdiscontrate)/100;
+	}
+	else  // 内
+	{
+		HostValue.i = (HostValue.i*CardConParam[i].indiscontrate)/100;
+	}
+
+	if (HostValue.i > CardConParam[i].maxdebit.i)
+		HostValue.i = CardConParam[i].maxdebit.i;
+	if (HostValue.i > balance)
+	{
+		tmp.i = HostValue.i - balance; // 透支限额
+		if (tmp.i > CardConParam[i].overdraw.i)
+			return -4;
+	}
+	
+#if 0
+	switch(LocalCardRate[i].cardattr)
+	{
+		case 0x01: // 普通储值卡
+			break;
+		case 0x02: // 计次卡
+			break;
+		case 0x03: // 定期卡
+			break;
+		case 0x04: // 特殊储值卡
+			break;
+		default:
+			break;
+	}
+#endif
+	
+
+}
+
+
+
+
 unsigned char SupportType_Cpu_jiaotong(unsigned char cardtype)
 {
 	
@@ -4713,37 +4778,34 @@ unsigned char SupportType_Cpu_jiaotong(unsigned char cardtype)
     	return status;
 }
 
-unsigned char SupportType_Cpu_zhujian(unsigned char cardtype)
+unsigned char SupportType_Cpu_zhujian(unsigned char cardtype,unsigned char *addr,unsigned char *outcardtype,unsigned char *rate)
 {
 	
 	unsigned char i = 0,status = 1;
 	unsigned char card_type;
-    unsigned char NandBuf[13];
-    
-    card_type=cardtype;
-    DBG_PRINTF("card_type=%02x\n",card_type);
-
-    for(i=0;i<13;i++)
-    {
-	    NandBuf[i]=CardLanBuf[512+i*48+1];
-        }
-    DBG_PRINTF("支持的卡类:");
-	menu_print(NandBuf, 13);
-	for(i = 0; i< 13; i++)
+    for(i=0; i<CARD_NUMBER; i++)
 	{
-    		//  printf("%02X",NandBuf[i]);
-    		if(NandBuf[i] == 0) 
-		        break;
-    		else
-    		{
-        		if(NandBuf[i] == card_type)
-			    status = 0;
-    		}
-    		if(status == MI_OK)
-		break;
+		if(cardtype == CardConParam[i].logiccardtype)
+			break;
+	}
+	if (i == CARD_NUMBER) //can't find the card's parameter
+	{
+		if (filemp.modebj == 0)
+			return -1; 
+		else if (filemp.modebj  == 0x01){
+			*outcardtype = 1;
+			*rate = 0x01;		
+		} else if (filemp.modebj  == 0x02) {
+			*outcardtype = 1;
+			*rate = 0x02;
+		}
+		i = 0;
 	}
 
-    	return status;
+	*addr = i;
+    
+   
+   	return status;
 }
 
 unsigned char ReadCardInfor_CPU(void)
@@ -4922,7 +4984,7 @@ unsigned char ReadCardInfor_CPU(void)
             break;
 
         case 5://判定可用卡类型参数
-             status  = SupportType_Cpu_zhujian(CardLanCPU.zcardtype);    //待根据卡类型参数列表查询
+             status  = SupportType_Cpu_zhujian(CardLanCPU.zcardtype,&cardmapaddr,&CardLan.CardType,&cardmaprate);    //待根据卡类型参数列表查询
 			if(status == MI_OK)
 				t++;
 			else
@@ -5920,7 +5982,7 @@ unsigned char ReadCardInfor_CPU(void)
                     menu_print(buff3, receive_buf[0]);       
                     tmp.i = 0;
                     memcpy(tmp.intbuf,receive_buf+1,2);
-
+					filem4.uprecordnum.i = tmp.i;
                     WriteSection_Para(0, buff3+3,tmp.i,0);
 
                     t++;
@@ -5955,7 +6017,7 @@ unsigned char ReadCardInfor_CPU(void)
 
 					//tmp1.i = 0;
 					//memcpy(tmp1.intbuf,filem4.downrecordnum,2);
-                    WriteSection_Para(1, buff3+3,tmp.i,filem4.downrecordnum.i);
+                    WriteSection_Para(1, buff3+3,tmp.i,filem4.uprecordnum.i);
 
                     t++;
                     }
