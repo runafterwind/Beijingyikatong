@@ -273,7 +273,7 @@ extern FLC0009 flc0009;
 
 typedef struct {
 	unsigned char uprecord;				//上行记录长度
-	unsigned char uprecordnum;		//上行记录个数
+	unsigned char ,filem3.downrecordnu;		//上行记录个数
 	unsigned char downrecord;			//下行记录长度
 	unsigned char downrecordnum;     //下行记录个数
 	unsigned char m3ver[2];             //文件版本

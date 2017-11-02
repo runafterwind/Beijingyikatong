@@ -2608,8 +2608,9 @@ void CardLanFile (unsigned char RW_Type)
 
 	unsigned char j,i;
 	int max,maxci,ci;
-    ShortUnon tmp;
-
+    	ShortUnon tmp;
+	int caculatesz;
+	
 	printf("---->you are in cardlanfile------>\n");
 	switch(RW_Type)
 	{
@@ -2647,9 +2648,11 @@ void CardLanFile (unsigned char RW_Type)
 		free(SectionParBuf);
 		SectionParBuf = NULL;
 		SectionParBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
+		
 		if(SectionParBuf != NULL)
 		{
-			if(platFileInfo[7].isexist==0)
+			
+			if(platFileInfo[7].isexist==0 || platFileInfo[7].filesz==0)
 				{
 					printf(" in func %s ,can not find /mnt/record/M4 \n",__func__);
 					return ;
@@ -2660,20 +2663,46 @@ void CardLanFile (unsigned char RW_Type)
 				break;
 			memset(buffer,0,sizeof(buffer));
 			result=fread(buffer,sizeof(unsigned char),6,ParaFile);
+			#if 0		
 			memcpy(filem4.uprecordnum.intbuf,buffer+1,2);
+			#else
+			filem4.uprecordnum.intbuf[0]=buffer[2];
+			filem4.uprecordnum.intbuf[1]=buffer[1];
+			#endif
+			printf("上行个数:%02x%02x\n",buffer[1],buffer[2]);
+			#if  0
 			memcpy(filem4.downrecordnum.intbuf,buffer+4,2);
-            max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
-	        ci = 0;
-			ParaFile = fopen("/mnt/record/M4","rb+");
+			#else
+			filem4.downrecordnum.intbuf[0]=buffer[5];
+			filem4.downrecordnum.intbuf[1]=buffer[4];
+			#endif
+			max = filem4.uprecordnum.i*filem4.uprecordnum.i;                         //需要修改根据票价参数定义个数
+			//max=filem4.uprecordnum.i*filem4.uprecord;
+			ci = 0;
+			printf("读取上行参数:\n");
+			printf("M4 size = %d\n",platFileInfo[7].filesz);
+			printf("上行站点个数:%d\n",filem4.uprecordnum.i);
+			printf("下行站点个数:%d\n",filem4.downrecordnum.i);
+			printf("计算文件大小:%d\n",filem4.uprecordnum.i*filem4.uprecordnum.i*2+filem4.downrecordnum.i*filem4.downrecordnum.i+6);
+			caculatesz=filem4.uprecordnum.i*filem4.uprecordnum.i*2+filem4.downrecordnum.i*filem4.downrecordnum.i+6;
+			if(caculatesz>platFileInfo[7].filesz)
+				{
+					printf(" erro : catulate sz != flie size \n");
+					break;
+				}
+			
 			result = fseek(ParaFile, 6, SEEK_SET);
-	        for(i=0;i<max;i++) {
-	            for(j=0;j<=i;j++){	               
-	                result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
-	              //  ci++;
-	              //  if(ci>=maxci)
-	              //      break;
-	            }
-	         }  
+			/*很有可能数据不是这样安排的*/
+		        for(i=0;i<max;i++) {
+		            for(j=0;j<=i;j++){	               
+		                result = fread(SectionParBuf+(i*max+j)*2,sizeof(unsigned char),2,ParaFile);
+		              //  ci++;
+		              //  if(ci>=maxci)
+		              //      break;
+					  memcpy(tmp.intbuf,SectionParBuf+(i*max+j)*2,2);
+					  printf("%d-->%d, price=%d\n",i,j,tmp.i);
+		            }
+		         }  
 			
 
 			fclose(ParaFile);
@@ -2686,13 +2715,14 @@ void CardLanFile (unsigned char RW_Type)
 		SectionParUpBuf = (unsigned char *)malloc(16384*sizeof(unsigned char));
 		if(SectionParUpBuf != NULL)
 		{       
-			if(platFileInfo[7].isexist==0)
+			if(platFileInfo[7].isexist==0||platFileInfo[7].filesz==0)
 				{
 					printf(" in func %s ,can not find /mnt/record/M4 \n",__func__);
 					return ;
 				}
 			ParaFile = fopen("/mnt/record/M4","rb+");
-			if (NULL == ParaFile) break;
+			if (NULL == ParaFile) 
+				break;
 			memset(buffer,0,sizeof(buffer));
 			result=fread(buffer,sizeof(unsigned char),6,ParaFile);
 			memcpy(filem4.uprecordnum.intbuf,buffer+1,2);
@@ -2701,6 +2731,20 @@ void CardLanFile (unsigned char RW_Type)
 			ci = 0;
 			ParaFile = fopen("/mnt/record/M4","rb+");
 			result = fseek(ParaFile, 6+filem4.uprecordnum.i*2, SEEK_SET);
+
+			printf("读取下行参数:\n");
+			printf("M4 size = %d\n",platFileInfo[7].filesz);
+			printf("上行站点个数:%d\n",filem4.uprecordnum.i);
+			printf("下行站点个数:%d\n",filem4.downrecordnum.i);
+			printf("计算文件大小:%d\n",filem4.uprecordnum.i*filem4.uprecordnum.i*2+filem4.downrecordnum.i*filem4.downrecordnum.i+6);
+			caculatesz=filem4.uprecordnum.i*filem4.uprecordnum.i*2+filem4.downrecordnum.i*filem4.downrecordnum.i+6;
+			if(caculatesz>platFileInfo[7].filesz)
+				{
+					printf(" erro : catulate sz != flie size \n");
+					fclose(ParaFile);
+					break;
+				}
+			
 			for(i=0;i<max;i++) {
 				for(j=0;j<=i;j++){
 					
@@ -2719,14 +2763,46 @@ void CardLanFile (unsigned char RW_Type)
 		break;
 
 	case SationdisupParup://上行公里数
-		free(StationdisupParBuf);
+		printf("读M3文件\n");
+		if(StationdisupParBuf!=NULL)
+			free(StationdisupParBuf);
+		
 		StationdisupParBuf = NULL;
-		//ParaFile = fopen("/mnt/record/sationdisup.sys","rb+");
+		
+		printf("----- 1234567\n");
+
+		printf("--:%s  ,isexist=%d size=%d \n",platFileInfo[3].name,platFileInfo[3].isexist,platFileInfo[3].filesz);
+		if(platFileInfo[3].isexist==0||platFileInfo[3].filesz==0)
+			{
+				printf(" in func %s ,can not find %s \n",__func__,platFileInfo[3].name);
+				break;
+			}
+
 		ParaFile = fopen(SECTION_KM_PATH_NAME,"rb+");
 		if (NULL == ParaFile) 
 			break;
 		memset(buffer,0,sizeof(buffer));
-		result = fread(buffer,sizeof(unsigned char),2,ParaFile);
+		result = fread(buffer,sizeof(unsigned char),4,ParaFile);
+		filem3.uprecord=buffer[0];
+		filem3.uprecordnum=buffer[1];
+		filem3.downrecord=buffer[2];
+		filem3.downrecordnum=buffer[3];
+		caculatesz=4+filem3.uprecord*filem3.uprecordnum+filem3.downrecordnum*filem3.downrecord;
+		printf("读取上行公里数参数:\n");
+		printf("上行站点数:%d\n",filem3.uprecordnum);
+		printf("上行单个长度:%d\n",filem3.uprecord);
+		printf("下行站点数:%d\n",filem3.downrecordnum);
+		printf("下行单个长度:%d\n",filem3.downrecord);
+		printf("M3 文件大小=%d \n",platFileInfo[3].filesz);
+		printf("计算大小=%d\n",caculatesz);
+		
+		if(caculatesz!=platFileInfo[3].filesz)
+			{
+				printf("erro filesz not match \n");
+				fclose(ParaFile);
+				break;
+			}
+		
 		mkLengthUp = buffer[0]*buffer[1];
 		if (mkLengthUp == 0)
 		{
@@ -2753,12 +2829,38 @@ void CardLanFile (unsigned char RW_Type)
 	case SationdisdownPardown://下行公里数
 		free(StationdisdownParBuf);
 		StationdisdownParBuf = NULL;
-		//ParaFile = fopen("/mnt/record/sationdisup.sys","rb+");
+
+		if(platFileInfo[3].isexist==0||platFileInfo[3].filesz==0)
+			{
+				printf(" in func %s ,can not find %s \n",__func__,platFileInfo[3].name);
+				return ;
+			}
 		ParaFile = fopen(SECTION_KM_PATH_NAME,"rb+");
 		if (NULL == ParaFile)
 			break;
+		
 		memset(buffer,0,sizeof(buffer));
 		result = fread(buffer,sizeof(unsigned char),4,ParaFile);
+		filem3.uprecord=buffer[0];
+		filem3.uprecordnum=buffer[1];
+		filem3.downrecord=buffer[2];
+		filem3.downrecordnum=buffer[3];
+		caculatesz=4+filem3.uprecord*filem3.uprecordnum+filem3.downrecordnum*filem3.downrecord;
+		printf("读取下行公里数参数:\n");
+		printf("上行站点数:%d\n",filem3.uprecordnum);
+		printf("上行单个长度:%d\n",filem3.uprecord);
+		printf("下行站点数:%d\n",filem3.downrecordnum);
+		printf("下行单个长度:%d\n",filem3.downrecord);
+		printf("M3 文件大小=%d \n",platFileInfo[3].filesz);
+		printf("计算大小=%d\n",caculatesz);
+		
+		if(caculatesz!=platFileInfo[3].filesz)
+			{
+				printf("erro filesz not match \n");
+				fclose(ParaFile);
+				break;
+			}
+		
 		mkLengthUp = buffer[0]*buffer[1];
 		mkLengthDown = buffer[2]*buffer[3];
 		if (mkLengthDown == 0)
@@ -2787,8 +2889,15 @@ void CardLanFile (unsigned char RW_Type)
 		break;
 		
     case LOCALCARDRATE:
+		
 		ParaFile = fopen(CARDRATE_PATH_NAME,"rb+");
-		if (NULL == ParaFile) break;
+		if (NULL == ParaFile) 
+			break;
+		if(platFileInfo[8].isexist==0||platFileInfo[8].filesz==0)
+			{
+				printf(" in func %s ,can not find %s \n",__func__,platFileInfo[8].name);
+				return ;
+			}
 		memset(buffer,0,sizeof(buffer));
 		result = fseek(ParaFile, 0, SEEK_SET);
 		result = fread(buffer,sizeof(unsigned char),6,ParaFile);
@@ -2805,7 +2914,13 @@ void CardLanFile (unsigned char RW_Type)
 
     case REMOTECARDRATE:
 		ParaFile = fopen(CARDRATE_PATH_NAME,"rb+");
-		if (NULL == ParaFile) break;
+		if (NULL == ParaFile)
+			break;
+		if(platFileInfo[8].isexist==0||platFileInfo[8].filesz==0)
+			{
+				printf(" in func %s ,can not find %s \n",__func__,platFileInfo[8].name);
+				return ;
+			}
 		memset(buffer,0,sizeof(buffer));		
 		result = fseek(ParaFile, 6+filem5.localratenum.i*20, SEEK_SET);
 		result = fread(buffer,sizeof(unsigned char),filem5.remotratenum.i*26,ParaFile);
@@ -2817,8 +2932,6 @@ void CardLanFile (unsigned char RW_Type)
 		fclose(ParaFile);
 
 		break;
-
-
 
 	default :
 		break;
@@ -2995,15 +3108,21 @@ void ReadandWriteBasicRateFile(unsigned char type)
     int result;
     FILE *basicrate;
 
-	if(platFileInfo[9].isexist==0)
+	printf("  ---- in func %s  ---------\n",__func__);
+	if(platFileInfo[9].isexist==0||platFileInfo[9].filesz==0)
 		{
-		printf(" in func %s ,can not find /mnt/record/MP \n");
+		printf(" in func %s ,can not find /mnt/record/MP \n",__func__);
 		return ;
 		}
     switch(type)
     {
         case 0:
-             basicrate = fopen("/mnt/record/MP","rb+");
+		 if(platFileInfo[9].isexist==0 || platFileInfo[9].filesz==0)
+	     	{
+	     		printf(" no  such file %s or file is  0 \n",platFileInfo[9].name);
+	     		break;
+	     	}
+             		basicrate = fopen("/mnt/record/MP","rb+");
 		     	memcpy(filemp.linenum,flc0005.glinenum,2);
 			 filemp.lineattr = flc0005.glineattr;
 			 memcpy(filemp.defaultbaseprice.intbuf,flc0005.gbasicpice,2);
@@ -3013,7 +3132,7 @@ void ReadandWriteBasicRateFile(unsigned char type)
 			 filemp.onoffdir = flc0005.gruleofupanddowm;
 			 
              result = fseek(basicrate, 0, SEEK_SET);
-             result = fwrite(&filemp.linenum[0],sizeof(unsigned char),24,basicrate);
+             result = fwrite(&filemp.linenum[0],sizeof(unsigned char),24,basicrate);		//这里有问题wxy
 			 
              fclose(basicrate);
           //   Section.SationNum[0] = flc0005.gupstationnum;
@@ -3027,15 +3146,21 @@ void ReadandWriteBasicRateFile(unsigned char type)
             break;
 
         case 1:
+	     if(platFileInfo[9].isexist==0 || platFileInfo[9].filesz==0)
+	     	{
+	     		printf(" no such file %s or file is  0 \n",platFileInfo[9].name);
+	     		break;
+	     	}
              basicrate = fopen("/mnt/record/MP","rb+");
-	      memcpy(&filemp.linenum[0],0,sizeof( FileMP));
+	      memset(&filemp.linenum[0],0,sizeof( FileMP));
              result = fseek(basicrate, 0, SEEK_SET);
              result = fread(&filemp.linenum[0],sizeof(unsigned char),127,basicrate);
              fclose(basicrate);
-			 DBG_PRINTF("费率卡二次信息文件MP:");
-			 menu_print(filemp.linenum,127);			 
-			 Section.SationNum[0] = filemp.uppricesitemnum.i;			 
-			 Sectionup.SationNum[0] = filemp.downpricesitemnum.i;             
+	     DBG_PRINTF("费率卡二次信息文件MP:");
+	     menu_print(filemp.linenum,127);			 
+	     Section.SationNum[0] = filemp.uppricesitemnum.intbuf[0];			 
+	     Sectionup.SationNum[0] = filemp.downpricesitemnum.intbuf[1];   
+	
              memcpy(Section.DeductTime,flc0005.gbupiaolimittime,2);
              memcpy(Section.Linenum,filemp.linenum,2);
 
@@ -3366,6 +3491,7 @@ void ShowMessage(int x ,int y,int font,char *out)
 int update_file_content(int index)
 {
 
+	printf(" --- in func %s  ---\n",__func__);
 	switch(index)
 	{
 		case 0:						//G1
@@ -3514,10 +3640,11 @@ unsigned char InitSystem(void)
 		exit(-3);
 	}
 
+#if 0
 	Filebuf = fopen(PARM_FILE_PATH,"a+");
 	if(Filebuf)
 	{
-		printf("open /mnt/record/cardlan.sys ok!\n");
+		printf("open /mnt/record/M4!\n");
 		fclose(Filebuf);
 	}
 	else
@@ -3527,7 +3654,7 @@ unsigned char InitSystem(void)
 		printf("Can't open /mnt/record/cardlan.sys\n");
 		exit(-4);
 	}
-
+#endif
 
 	 BlackFile = fopen("/mnt/record/Blacklist.sys","a+");
 
@@ -3583,7 +3710,7 @@ unsigned char InitSystem(void)
 	
 	
 
-	
+#if 0
 
 	Filebuf = fopen(SECTION_KM_PATH_NAME,"a+");
 
@@ -3649,7 +3776,11 @@ unsigned char InitSystem(void)
 		exit(-1);
 	}
 	
+
+#endif
+
 	
+
     ShowMessage(0,56,16,"加载设备运行文件成功");
     
     g_FgFileOccurError = 0;
@@ -3710,6 +3841,7 @@ unsigned char InitSystem(void)
     	}
 
     Card_SysInit();   
+	
 #if 1
     ReadandWriteBasicRateFile(1);               //初始化MP文件
     InitBlackListBuff();                        //系统初始化黑名单
@@ -3720,7 +3852,7 @@ unsigned char InitSystem(void)
 
 
 
-
+	printf(" 读取 MP 成功 \n");
 #ifdef BS
     ReadMERCHANTNO();//读取商户号文件
 #endif   
@@ -3729,7 +3861,9 @@ unsigned char InitSystem(void)
 	
 	//Read_Parameter();							//消费参数读取
 	CardLanFile(SectionPar);                    //上行分段参数读取M4
+		printf(" 上行分段参数读取完成\n");
 	CardLanFile(SationdisupParup);              //上行公里数读取     M3 
+		printf(" 上行公里数文件读取完成\n");
 	if(Section.Enableup == 0x55)
 	{
 		CardLanFile(SectionParup);              //下行参数读取		M4
@@ -3738,8 +3872,10 @@ unsigned char InitSystem(void)
 	printf("in inisystem the sectionum :%d\n",SectionNum);
 
 #endif	
-	CardLanFile(LOCALCARDRATE);					//本地卡M5		
-	CardLanFile(REMOTECARDRATE);				//异地卡M5
+	//CardLanFile(LOCALCARDRATE);					//本地卡M5	
+		printf("本地卡文件读取完成\n");
+	//CardLanFile(REMOTECARDRATE);				//异地卡M5
+		printf("异地卡文件读取完成\n");
 	FindSavedata();	
 	// added by taeguk calculate CRC16
 	//Calc_UpdateCrc();	        

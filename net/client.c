@@ -1,6 +1,27 @@
 #include "client.h"
 #include "queue.h"
+
+#define  arm_linux  1
+
+#if arm_linux
 #include "../gui/InitSystem.h"
+
+#else
+
+typedef union
+{
+	unsigned char intbuf[2];
+	unsigned short i;
+} ShortUnon;
+
+typedef union
+{
+	unsigned char longbuf[4];
+	unsigned int  i;
+} LongUnon;
+
+pthread_mutex_t m_socketwrite = PTHREAD_MUTEX_INITIALIZER; 
+#endif
 
 #define IP "211.145.51.150"
 #define PORT 40009
@@ -69,7 +90,10 @@ int init_version_indexfile()
 	indexitem tmpitem;
 	int i;
 	int ret;
+	struct stat filinfo;
 	
+	printf("---------- in func %s ----------------\n",__func__);
+	system("ls /mnt/record");
 	if(access(FILE_INDEX_PATH,0)!=0)
 		{
 			fd=open(FILE_INDEX_PATH,O_RDWR|O_CREAT);
@@ -103,10 +127,21 @@ int init_version_indexfile()
 					platFileInfo[i].isexist=0;
 					platFileInfo[i].filesz=0;
 			}
+			else{
+				platFileInfo[i].isexist=1;
+				stat(platFileInfo[i].name,&filinfo);
+				platFileInfo[i].filesz=filinfo.st_size;
+			}
+
+			printf("=======in func %s  ========== \n",__func__);
+			printf(" file name: %s \n",platFileInfo[i].name);
+			printf(" file size:%d , file version:%02x%02x \n",platFileInfo[i].filesz,platFileInfo[i].ver[0],platFileInfo[i].ver[1]);
+			printf(" file exist:%d \n",platFileInfo[i].isexist);
 		}
 		close(fd);
 	}
 
+	system("ls /mnt/record");
 	return 0;
 }
 
@@ -1944,8 +1979,12 @@ downfileprocess dwnFilPro[FILE_SUPPORT_MAX]={
 		{.keyword=FIL11_HT_WHITE},
 };
 
-
+#if arm_linux
 #define DEST_PATH  "/mnt/record/"				//文件目录
+#else
+#define DEST_PATH  "./record/"				//文件目录
+#endif
+
 int init_dwonfie_process(file_desinfo_back * backinfo)
 {
 	LongUnon longdata;
@@ -2341,6 +2380,7 @@ int update_version_index_file(int pos)
 			return -1;
 		}
 
+	printf(" ---- in func %s  -- \n",__func__);
 	int fd;
 	int offset;
 	indexitem tmpitem;
@@ -2351,15 +2391,25 @@ int update_version_index_file(int pos)
 			return -1;
 		}
 
+	tmpitem.isexist=1;
 	tmpitem.filesz=dwnFilPro[pos].destlen;
 	tmpitem.crc[0]=dwnFilPro[pos].filecrc[0];
 	tmpitem.crc[1]=dwnFilPro[pos].filecrc[1];
 	memcpy(tmpitem.ver,dwnFilPro[pos].ver,4);
-
+	memcpy(tmpitem.name,dwnFilPro[pos].destname,40);
+	
 	offset=sizeof(indexitem)*pos;
 	lseek(fd,offset,SEEK_SET);
 	write(fd,&tmpitem,sizeof(indexitem));
 	close(fd);
+
+	platFileInfo[pos].crc[0]=dwnFilPro[pos].filecrc[0];
+	platFileInfo[pos].crc[1]=dwnFilPro[pos].filecrc[1];
+	memcpy(platFileInfo[pos].ver,dwnFilPro[pos].ver,4);
+	platFileInfo[pos].filesz=dwnFilPro[pos].destlen;
+	platFileInfo[pos].isexist=1;
+	
+	
 	return 0;
 
 }
@@ -2790,7 +2840,8 @@ int read_datas_tty(int fd,unsigned char *buffer,int * revlen)
     tv.tv_sec = 10;                   // the rcv wait time
     tv.tv_usec = 0;                   // 50ms
 
-	while(1)
+    printf("----------in Func %s ------\n",__func__);
+    while(1)
     {
         FD_ZERO(&rfds);
         FD_SET(fd,&rfds);
@@ -2802,30 +2853,37 @@ int read_datas_tty(int fd,unsigned char *buffer,int * revlen)
         }
         else if(retval)
         {
-           // ret= read(fd,buffer + rilen,512);
-            ret= read(fd,buffer + rilen,2048);
-            rilen += ret;
-            if(ret < 0)
-            {
-                return READ_ERR;
-            }
+          
+          	     // ret= read(fd,buffer + rilen,512);
+	            ret= read(fd,buffer + rilen,1024);
+	            rilen += ret;
+	            if(ret < 0)
+	            {
+	                return READ_ERR;
+	            }
+           	    printf("read back ret=%d \n",ret);
+		
+		system("sync");			//关键，强制刷新输入缓存,避免接受不全
+		if(ret>=0 && ret <1024)
+			break;	
             
-			
-#if CLIENT_DEBUG
-            printf("read socket ret:%d data:%s \n",ret,buffer);
-			int i;
-			for(i=0;i<ret;i++)
-				printf("%02x ",buffer[i]);
-			printf("\n");
-#endif
-            break;
         }
         else
         {
-            return SELECT_TIMOUT;
+            if(ret>0)
+			break;
+	     else
+            	return SELECT_TIMOUT;
         }
     }
 
+	#if CLIENT_DEBUG
+      		 printf("read socket rilen:%d data:%s \n",rilen,buffer);
+		int i;
+		for(i=0;i<rilen;i++)
+			printf("%02x ",buffer[i]);
+		printf("\n");
+	#endif
 	*revlen=rilen;
     return SUCCESS_OK;
 }
@@ -3278,8 +3336,10 @@ int client_react_server()
 										system("sync");
 										printf("------------ dwon load file success---\n");
 										/*更新索引文件*/
-										update_version_index_file( pos);
-										update_file_content(pos);
+									//	update_version_index_file( pos);
+									//	update_file_content(pos);
+
+										
 									#endif
 									}
 									
@@ -3550,6 +3610,7 @@ void * send_thread(void * args)
 */
 
 //extern void Display_signal(unsigned char type);
+#if  arm_linux
 extern int bp_fd;
 static unsigned char net_cdma_rest(unsigned int dev)
 {
@@ -3697,8 +3758,10 @@ void * Auto_send(void * argc)
 
 }
 
+#endif
+
 /*test program*/
-#if 0
+#if (arm_linux==0)
 int main()
 {
 
